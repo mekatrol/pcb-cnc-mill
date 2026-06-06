@@ -16,16 +16,25 @@ details.
 - `firmware/core/` - hardware-neutral parser, command, state, safety, planner,
   and step scheduling code. G-code parsing, command dispatch, machine state,
   safety state, motion planning, and step scheduling belong here.
-- `firmware/hal/` - low-level MCU wrappers for GPIO, timers, PWM, serial, flash,
-  ADC, and interrupts. This layer keeps core firmware independent from one board
-  or vendor SDK.
+- `firmware/hal/include/` - standard HAL interfaces used by core and reusable
+  drivers.
+- `firmware/hal/stm32/` - STM32 implementations for GPIO, timers, PWM, serial,
+  flash, ADC, interrupts, and other MCU-specific services.
+- `firmware/hal/lpc/` - LPC implementations for the same standard HAL
+  interfaces.
+- `firmware/drivers/` - reusable device or protocol drivers that should be
+  written once, then used by several boards or MCU families.
+- `firmware/drivers/usb/` - shared USB device support.
+- `firmware/drivers/usb_cdc/` - shared USB CDC serial support.
+- `firmware/drivers/can/` - shared CAN support for boards and toolheads.
+- `firmware/drivers/tmc2209/` - shared TMC2209 stepper driver support.
 - `firmware/boards/` - board-specific support grouped by hardware function
   first, then by vendor and model at the leaf. Pin maps, MCU quirks, timer
   choices, ports, and board feature flags belong here.
 - `firmware/boards/mainboard/` - main controller board definitions, such as
   `btt_skr_mini_e3_v3/`, `fysetc_spider_king_10/`, and `duet_3_mini_5_plus/`.
 - `firmware/boards/display/` - display and pendant board definitions, such as
-  `btt_tft25/`.
+  `btt_tft35_e3/`.
 - `firmware/boards/toolhead/` - remote toolhead and IO board definitions, such
   as `btt_ebb36/` and `btt_ebb42/`.
 - `firmware/configs/machines/` - per-machine config for limits, travel, units,
@@ -33,8 +42,9 @@ details.
   live in config, not hidden source constants.
 
 Rule of thumb: core code should not know a board brand exists. Board folders
-hold pins, ports, MCU quirks, and feature flags. Machine config ties selected
-hardware to one CNC build.
+hold pins, ports, MCU quirks, and feature flags. HAL folders hold processor
+family implementations. Driver folders hold standard protocol and device code
+once. Machine config ties selected hardware to one CNC build.
 
 ## Codex Project Notes
 
