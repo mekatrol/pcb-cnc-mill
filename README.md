@@ -55,3 +55,13 @@ Codex guidance lives in `.codex/`:
 - `.codex/standards.md` - rules Codex must follow when making changes.
 
 Important rule: every project change should keep this README current.
+
+## Current Firmware Targets
+
+- `firmware/boards/display/btt_tft35_e3/` - initial STM32F207VCT6 bring-up
+  skeleton for the BTT TFT35 E3 display. It includes startup code, linker
+  script, GDB script, and Makefile targets for ST-Link/OpenOCD flash and debug.
+- `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
+  bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
+  code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD
+  flash and debug.
