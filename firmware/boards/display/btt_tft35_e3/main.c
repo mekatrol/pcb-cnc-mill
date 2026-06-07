@@ -31,6 +31,8 @@
 #define GPIO_BOP(base) MMIO32((base) + 0x10u)
 #define GPIO_BC(base) MMIO32((base) + 0x14u)
 
+// External Memory Controller. On GD32F205 it is the peripheral
+// that drives the TFT LCD as a 16-bit 8080-style parallel memory device.
 #define EXMC_BASE 0xA0000000u
 #define EXMC_SNCTL0 MMIO32(EXMC_BASE + 0x00u)
 #define EXMC_SNTCFG0 MMIO32(EXMC_BASE + 0x04u)
@@ -39,6 +41,8 @@
 #define SYST_RVR MMIO32(SYSTICK_BASE + 0x04u)
 #define SYST_CVR MMIO32(SYSTICK_BASE + 0x08u)
 
+// The LCD controller is memory-mapped through EXMC bank 0. Writes to LCD_REG
+// send command bytes; writes to LCD_RAM send command parameters or pixel data.
 #define LCD_REG MMIO16(0x60000000u)
 #define LCD_RAM MMIO16(0x60020000u)
 
@@ -73,7 +77,7 @@ static void delay_cycles(volatile uint32_t cycles) {
   }
 }
 
-static void gpio_config(uint32_t base, uint8_t pin, uint32_t config) {
+static void configure_gpio_pin_mode(uint32_t base, uint8_t pin, uint32_t config) {
   volatile uint32_t *ctl = (pin < 8) ? &GPIO_CTL0(base) : &GPIO_CTL1(base);
   const uint8_t shift = (pin & 7u) * 4u;
   *ctl = (*ctl & ~(0xFu << shift)) | (config << shift);
@@ -91,9 +95,13 @@ static bool gpio_input_is_high(uint32_t base, uint8_t pin) {
   return (GPIO_ISTAT(base) & BIT(pin)) != 0;
 }
 
-static void clock_init(void) {
-  RCU_APB2EN |= BIT(0) | BIT(2) | BIT(4) | BIT(5) | BIT(6);  // AFIO, GPIOA/C/D/E
-  RCU_AHB1EN |= BIT(8);                                      // EXMC
+static void initialize_clocks_for_display_board(void) {
+  // RCU is GigaDevice's Reset and Clock Unit. These bits enable the Alternate
+  // Function I/O block plus GPIO ports A, C, D, and E.
+  RCU_APB2EN |= BIT(0) | BIT(2) | BIT(4) | BIT(5) | BIT(6);
+
+  // Enable EXMC so the LCD can be written through the memory-mapped bus.
+  RCU_AHB1EN |= BIT(8);
   (void)RCU_APB2EN;
   (void)RCU_AHB1EN;
 
@@ -102,39 +110,46 @@ static void clock_init(void) {
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
 }
 
-static void board_gpio_init(void) {
-  gpio_config(GPIOD_BASE, LCD_BACKLIGHT_PIN, 0x3);  // 50 MHz output push-pull
-  gpio_config(GPIOD_BASE, BUZZER_PIN, 0x3);
+static void initialize_display_board_gpio(void) {
+  // 0x3 is the GD32F20x GPIO mode for 50 MHz general-purpose push-pull output.
+  configure_gpio_pin_mode(GPIOD_BASE, LCD_BACKLIGHT_PIN, 0x3);
+  configure_gpio_pin_mode(GPIOD_BASE, BUZZER_PIN, 0x3);
   gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, false);
   gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
 
-  gpio_config(GPIOC_BASE, ENCODER_EN_PIN, 0x3);
+  configure_gpio_pin_mode(GPIOC_BASE, ENCODER_EN_PIN, 0x3);
   gpio_output_set(GPIOC_BASE, ENCODER_EN_PIN, true);
 
-  gpio_config(GPIOA_BASE, ENCODER_A_PIN, 0x8);  // Input with pull-up/down
-  gpio_config(GPIOC_BASE, ENCODER_B_PIN, 0x8);
-  gpio_config(GPIOC_BASE, ENCODER_BTN_PIN, 0x8);
+  // 0x8 is input mode with pull-up/pull-down. Setting the output latch high
+  // selects pull-up on this STM32F1/GD32F20x-style GPIO peripheral.
+  configure_gpio_pin_mode(GPIOA_BASE, ENCODER_A_PIN, 0x8);
+  configure_gpio_pin_mode(GPIOC_BASE, ENCODER_B_PIN, 0x8);
+  configure_gpio_pin_mode(GPIOC_BASE, ENCODER_BTN_PIN, 0x8);
   gpio_output_set(GPIOA_BASE, ENCODER_A_PIN, true);
   gpio_output_set(GPIOC_BASE, ENCODER_B_PIN, true);
   gpio_output_set(GPIOC_BASE, ENCODER_BTN_PIN, true);
 }
 
-static void fsmc_pin(uint32_t base, uint8_t pin) {
-  gpio_config(base, pin, 0xBu);  // 50 MHz alternate-function push-pull
+static void configure_lcd_external_memory_bus_pin(uint32_t base, uint8_t pin) {
+  // 0xB is the GD32F20x GPIO mode for 50 MHz alternate-function push-pull.
+  // The alternate function connects this pin to EXMC instead of plain GPIO.
+  configure_gpio_pin_mode(base, pin, 0xBu);
 }
 
-static void lcd_bus_init(void) {
-  const uint8_t pd_pins[] = {0, 1, 4, 5, 7, 8, 9, 10, 11, 14, 15};
-  const uint8_t pe_pins[] = {7, 8, 9, 10, 11, 12, 13, 14, 15};
+static void initialize_lcd_parallel_external_memory_bus(void) {
+  const uint8_t port_d_lcd_bus_pins[] = {0, 1, 4, 5, 7, 8, 9, 10, 11, 14, 15};
+  const uint8_t port_e_lcd_data_pins[] = {7, 8, 9, 10, 11, 12, 13, 14, 15};
 
-  AFIO_PCF0 |= BIT(15);  // Remap PD0/PD1 from oscillator pins to GPIO/EXMC.
+  // PD0 and PD1 normally overlap oscillator pins. This remap connects them to
+  // GPIO/EXMC so the LCD can use the full 16-bit parallel data bus.
+  AFIO_PCF0 |= BIT(15);
 
-  for (uint32_t i = 0; i < sizeof(pd_pins); i++) {
-    fsmc_pin(GPIOD_BASE, pd_pins[i]);
+  for (uint32_t i = 0; i < sizeof(port_d_lcd_bus_pins); i++) {
+    configure_lcd_external_memory_bus_pin(GPIOD_BASE, port_d_lcd_bus_pins[i]);
   }
 
-  for (uint32_t i = 0; i < sizeof(pe_pins); i++) {
-    fsmc_pin(GPIOE_BASE, pe_pins[i]);
+  for (uint32_t i = 0; i < sizeof(port_e_lcd_data_pins); i++) {
+    configure_lcd_external_memory_bus_pin(GPIOE_BASE, port_e_lcd_data_pins[i]);
   }
 
   EXMC_SNCTL0 = 0;
@@ -299,9 +314,9 @@ static void lcd_draw_boot_screen(void) {
   lcd_draw_text(92, 238, "ENCODER BUTTON CHIRPS", bg, amber, 2);
 }
 
-static void lcd_init(void) {
+static void initialize_lcd_controller(void) {
   gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, true);
-  lcd_bus_init();
+  initialize_lcd_parallel_external_memory_bus();
   delay_ms(20);
 
   lcd_write_command(0x01u);  // Software reset
@@ -375,11 +390,11 @@ static void encoder_poll(void) {
 }
 
 int main(void) {
-  clock_init();
-  board_gpio_init();
+  initialize_clocks_for_display_board();
+  initialize_display_board_gpio();
   chirp(1800, 60);
   delay_ms(80);
-  lcd_init();
+  initialize_lcd_controller();
 
   encoder_state = encoder_sample();
 
