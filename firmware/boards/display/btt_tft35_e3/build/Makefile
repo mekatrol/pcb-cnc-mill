@@ -66,6 +66,10 @@ flash: $(OUT_BIN)
 	@echo "[FLASH] Flashing binary with ST-Link"
 	$(STFLASH) --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
 
+flash-reset: $(OUT_BIN)
+	@echo "[FLASH] Flashing binary with ST-Link"
+	$(STFLASH) --connect-under-reset --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
+
 .PHONY: debug
 debug: $(OUT_ELF)
 	@echo "[OPENOCD] Starting debug session"
