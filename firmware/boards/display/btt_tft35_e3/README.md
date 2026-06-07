@@ -4,6 +4,7 @@ Initial board target for the BIGTREETECH TFT35 E3 display controller.
 
 Known controller variant on this board:
 
+- Board: BIGTREETECH TFT35 E3 V3.0.1, GD32 variant
 - MCU: GigaDevice GD32F205
 - Core: ARM Cortex-M3
 - Flash: 256 KiB
@@ -51,13 +52,14 @@ verification before they are used.
 
 ## Current bring-up scope
 
-The first display bring-up code follows BIGTREETECH's
-`BIGTREE_TFT35_E3_V3_0`/`pin_TFT35_E3_V3_0.h` definitions, which inherit the
-TFT35 V3.0 pin map:
+The first display bring-up code follows BIGTREETECH's GD32 TFT35 E3 V3.0
+variant path: `BIGTREE_GD_TFT35_E3_V3_0` includes
+`pin_GD_TFT35_E3_V3_0.h`, which inherits `pin_GD_TFT35_V3_0.h` and the TFT35
+V3.0 pin map. This matches the V3.0.1 board in use here:
 
 - LCD: 16-bit FSMC 8080 bus, command at `0x60FFFFFE`, data at `0x61000000`
 - Backlight: `PD12`
-- Knob RGB LED data: `PC7`
+- Knob RGB LED data: `PC7`, with 2 NeoPixels on the GD/V3.0.1 board
 - Buzzer/sounder: `PD13`
 - Rotary encoder: `PA8` / `PC9`
 - Encoder push button: `PC8`
