@@ -3,6 +3,7 @@
 
 #include "display_hal.h"
 #include "registers.h"
+#include "runtime/chirp.h"
 
 enum
 {
@@ -29,7 +30,6 @@ enum
   EXMC_ADDRESS_SETUP_TICKS = 15,
   EXMC_DATA_SETUP_TICKS = 255,
   SYSTICK_RELOAD_TICKS = SYSTEM_CORE_CLOCK_HZ / 1000u,
-  BUZZER_MAX_EDGES_PER_SERVICE = 1,
 };
 
 typedef enum
@@ -53,14 +53,7 @@ static uint32_t next_knob_led_update_ms;
 static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
-static bool buzzer_chirp_active;
-static bool buzzer_chirp_request_pending;
-static bool buzzer_output_high;
-static uint32_t buzzer_requested_half_period_us;
-static uint32_t buzzer_requested_edges;
-static uint32_t buzzer_active_half_period_us;
-static uint32_t buzzer_remaining_edges;
-static uint32_t buzzer_next_edge_us;
+static runtime_chirp_t buzzer_chirp;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -89,7 +82,7 @@ static void delay_us_approx(uint32_t us)
   delay_cycles(us * DELAY_LOOP_CYCLES_PER_US);
 }
 
-static uint32_t monotonic_microseconds(void)
+static uint32_t display_get_monotonic_microseconds(void)
 {
   uint32_t before_milliseconds;
   uint32_t current_tick_count;
@@ -903,96 +896,29 @@ static void initialize_lcd_controller(void)
   lcd_draw_boot_screen();
 }
 
-static bool buzzer_has_work(void)
+static void buzzer_set_output(bool high)
 {
-  return buzzer_chirp_request_pending || buzzer_chirp_active;
-}
-
-static void buzzer_stop_chirp(void)
-{
-  buzzer_chirp_active = false;
-  buzzer_chirp_request_pending = false;
-  buzzer_output_high = false;
-  buzzer_remaining_edges = 0u;
-  buzzer_next_edge_us = 0u;
-  buzzer_active_half_period_us = 0u;
-  buzzer_requested_edges = 0u;
-  buzzer_requested_half_period_us = 0u;
-  gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
+  gpio_output_set(GPIOD_BASE, BUZZER_PIN, high);
 }
 
 static void chirp(uint32_t frequency_hz, uint32_t duration_ms)
 {
-  if (frequency_hz == 0 || duration_ms == 0)
-  {
-    return;
-  }
+  runtime_chirp_request(&buzzer_chirp, frequency_hz, duration_ms);
+}
 
-  uint32_t half_period_us = 1000000u / (frequency_hz * 2u);
-  if (half_period_us == 0)
-  {
-    half_period_us = 1u;
-  }
+static void initialize_buzzer_chirp(void)
+{
+  const runtime_chirp_driver_t driver = {
+    .get_monotonic_microseconds = display_get_monotonic_microseconds,
+    .set_output = buzzer_set_output,
+  };
 
-  uint32_t edges = duration_ms * frequency_hz * 2u / 1000u;
-  if (edges < 2u)
-  {
-    edges = 2u;
-  }
-
-  // Queue the newest chirp request and return to the input caller. The
-  // low-priority scheduler task below owns the edge timing so button and touch
-  // handling do not sit in a full-duration busy loop.
-  buzzer_requested_half_period_us = half_period_us;
-  buzzer_requested_edges = edges;
-  buzzer_chirp_request_pending = true;
+  runtime_chirp_initialize(&buzzer_chirp, driver);
 }
 
 void display_run_buzzer_tasks(void)
 {
-  if (buzzer_chirp_request_pending)
-  {
-    buzzer_chirp_request_pending = false;
-    buzzer_chirp_active = true;
-    buzzer_output_high = true;
-    buzzer_active_half_period_us = buzzer_requested_half_period_us;
-    buzzer_remaining_edges = buzzer_requested_edges - 1u;
-    buzzer_next_edge_us = monotonic_microseconds() + buzzer_active_half_period_us;
-    gpio_output_set(GPIOD_BASE, BUZZER_PIN, true);
-  }
-
-  if (!buzzer_chirp_active)
-  {
-    return;
-  }
-
-  uint32_t edges_serviced = 0u;
-  while (edges_serviced < BUZZER_MAX_EDGES_PER_SERVICE &&
-         (int32_t)(monotonic_microseconds() - buzzer_next_edge_us) >= 0)
-  {
-    if (buzzer_remaining_edges == 0u)
-    {
-      buzzer_chirp_active = false;
-      break;
-    }
-
-    buzzer_output_high = !buzzer_output_high;
-    gpio_output_set(GPIOD_BASE, BUZZER_PIN, buzzer_output_high);
-    buzzer_remaining_edges--;
-    buzzer_next_edge_us += buzzer_active_half_period_us;
-    edges_serviced++;
-  }
-
-  if (buzzer_chirp_active && buzzer_remaining_edges == 0u &&
-      (int32_t)(monotonic_microseconds() - buzzer_next_edge_us) >= 0)
-  {
-    buzzer_chirp_active = false;
-  }
-
-  if (!buzzer_chirp_active)
-  {
-    buzzer_stop_chirp();
-  }
+  runtime_chirp_service(&buzzer_chirp);
 }
 
 static uint8_t encoder_sample(void)
@@ -1075,6 +1001,7 @@ void display_initialize_hardware(void)
 {
   initialize_clocks_for_display_board();
   initialize_display_board_gpio();
+  initialize_buzzer_chirp();
   chirp(1800, 60);
   delay_ms(80);
   initialize_lcd_controller();
@@ -1107,7 +1034,7 @@ void display_run_background_tasks(void)
 
 void display_wait_for_scheduler_tick(void)
 {
-  if (buzzer_has_work())
+  if (runtime_chirp_has_work(&buzzer_chirp))
   {
     return;
   }

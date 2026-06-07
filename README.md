@@ -24,8 +24,9 @@ details.
   state, safety state, motion planning, shared runtime, and step scheduling
   belong here.
 - `firmware/core/runtime/` - shared bare-metal runtime code used by mainboard,
-  display, and toolhead builds. Cooperative scheduler task types and scheduler
-  dispatch live here, not in board-role entry points.
+  display, and toolhead builds. Cooperative scheduler dispatch and reusable
+  low-priority chirp feedback state machines live here, not in board-role entry
+  points.
 - `firmware/core/mainboard/main.c` - shared main controller firmware entry
   point. It calls the selected mainboard HAL instead of knowing board pins or
   MCU details. It should only wire startup, runtime setup, and the main loop.
