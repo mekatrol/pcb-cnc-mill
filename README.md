@@ -3,17 +3,17 @@ Firmware for a PCB milling CNC.
 
 ## Project Direction
 
-This firmware is for hobby PCB mill control. It takes ideas from Klipper,
-Marlin, and GRBL: host command handling, G-code parsing, planned motion,
-precise step generation, spindle control, and clear machine safety states.
-The base execution model is bare metal plus interrupts plus a priority-based
-scheduler. Hardware timers own precise step timing; preemptive-priority
-scheduler tasks handle urgent bounded service work such as planner refill and
-step generator starvation checks, and normal scheduler tasks handle
-communication, storage, display, input, and housekeeping. One-shot work such as
-chirps, display commands, user input events, communication messages, and motion
-command enqueueing runs through bounded priority queues. Stepper pulse timing
-still stays in hardware timer code.
+This firmware is for hobby PCB mill control. It focuses on host command
+handling, G-code parsing, planned motion, precise step generation, spindle
+control, and clear machine safety states. The base execution model is bare
+metal plus interrupts plus a priority-based scheduler. Hardware timers own
+precise step timing; preemptive-priority scheduler tasks handle urgent bounded
+service work such as planner refill and step generator starvation checks, and
+normal scheduler tasks handle communication, storage, display, input, and
+housekeeping. One-shot work such as chirps, display commands, user input
+events, communication messages, and motion command enqueueing runs through
+bounded priority queues. Stepper pulse timing still stays in hardware timer
+code.
 
 ## Firmware Layout
 
@@ -77,6 +77,10 @@ Board-role hardware abstraction layer (HAL) methods are documented in
 
 Scheduler task setup, priority guidance, preemption limits, and current
 scheduler limitations are documented in [`SCHEDULER.md`](SCHEDULER.md).
+
+Display menu structure, large TFT and compact 128x64 layouts, operator screens,
+safety cues, coordinate views, and settings screens are documented in
+[`DISPLAY_MENU.md`](DISPLAY_MENU.md).
 
 ## Codex Project Notes
 
