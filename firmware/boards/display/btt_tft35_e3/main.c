@@ -38,7 +38,7 @@ typedef enum
   LCD_CONTROLLER_ST7796S,
 } lcd_controller_t;
 
-static volatile uint32_t tick_ms;
+static volatile uint32_t monotonic_milliseconds;
 static volatile int32_t encoder_position;
 static volatile bool encoder_pressed;
 static uint8_t encoder_state;
@@ -56,13 +56,13 @@ static void knob_led_set_enabled(bool enabled);
 
 void SysTick_Handler(void)
 {
-  tick_ms++;
+  monotonic_milliseconds++;
 }
 
 static void delay_ms(uint32_t ms)
 {
-  const uint32_t end = tick_ms + ms;
-  while ((int32_t)(end - tick_ms) > 0)
+  const uint32_t end = monotonic_milliseconds + ms;
+  while ((int32_t)(end - monotonic_milliseconds) > 0)
   {
   }
 }
@@ -121,7 +121,7 @@ static void backlight_set(bool enabled)
 
 static void record_activity(void)
 {
-  last_activity_ms = tick_ms;
+  last_activity_ms = monotonic_milliseconds;
   if (!backlight_enabled)
   {
     backlight_set(true);
@@ -134,7 +134,7 @@ static void record_activity(void)
 
 static void backlight_check_idle_timeout(void)
 {
-  if (backlight_enabled && (uint32_t)(tick_ms - last_activity_ms) >= 30000u)
+  if (backlight_enabled && (uint32_t)(monotonic_milliseconds - last_activity_ms) >= 30000u)
   {
     backlight_set(false);
     knob_led_set_enabled(false);
@@ -319,14 +319,14 @@ static void knob_led_show_rainbow(void)
 
 static void knob_led_update_rainbow(void)
 {
-  if (!knob_led_enabled || (int32_t)(next_knob_led_update_ms - tick_ms) > 0)
+  if (!knob_led_enabled || (int32_t)(next_knob_led_update_ms - monotonic_milliseconds) > 0)
   {
     return;
   }
 
   knob_led_rainbow_phase = (uint8_t)(knob_led_rainbow_phase + 3u);
   knob_led_show_rainbow();
-  next_knob_led_update_ms = tick_ms + 80u;
+  next_knob_led_update_ms = monotonic_milliseconds + 80u;
 }
 
 static void knob_led_set_enabled(bool enabled)
@@ -334,7 +334,7 @@ static void knob_led_set_enabled(bool enabled)
   if (enabled)
   {
     knob_led_show_rainbow();
-    next_knob_led_update_ms = tick_ms + 80u;
+    next_knob_led_update_ms = monotonic_milliseconds + 80u;
   }
   else
   {
@@ -432,7 +432,7 @@ static void initialize_display_board_gpio(void)
   configure_gpio_pin_mode(GPIOD_BASE, LCD_BACKLIGHT_PIN, 0x3);
   configure_gpio_pin_mode(GPIOD_BASE, BUZZER_PIN, 0x3);
   backlight_set(true);
-  last_activity_ms = tick_ms;
+  last_activity_ms = monotonic_milliseconds;
   gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
 
   configure_gpio_pin_mode(GPIOC_BASE, ENCODER_EN_PIN, 0x3);
@@ -976,6 +976,11 @@ void display_initialize_hardware(void)
   encoder_state = encoder_sample();
 }
 
+uint32_t display_get_monotonic_milliseconds(void)
+{
+  return monotonic_milliseconds;
+}
+
 void display_run_background_tasks(void)
 {
   const int8_t encoder_delta = encoder_poll();
@@ -992,5 +997,9 @@ void display_run_background_tasks(void)
   touch_poll();
   backlight_check_idle_timeout();
   knob_led_update_rainbow();
+}
+
+void display_wait_for_scheduler_tick(void)
+{
   delay_ms(1);
 }

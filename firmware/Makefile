@@ -83,7 +83,10 @@ CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
 # =========================
 # Sources
 # =========================
+COMMON_CSRCS := core/runtime/scheduler.c
+
 CSRCS := $(ENTRY_CSRCS) \
+         $(COMMON_CSRCS) \
          $(wildcard $(BOARD_DIR)/*.c) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.c))
 

@@ -20,14 +20,18 @@ needed. This keeps shared control code separate from board pin maps and vendor
 details.
 
 - `firmware/core/` - hardware-neutral parser, command, state, safety, planner,
-  and step scheduling code. G-code parsing, command dispatch, machine state,
-  safety state, motion planning, and step scheduling belong here.
+  runtime, and step scheduling code. G-code parsing, command dispatch, machine
+  state, safety state, motion planning, shared runtime, and step scheduling
+  belong here.
+- `firmware/core/runtime/` - shared bare-metal runtime code used by mainboard,
+  display, and toolhead builds. Cooperative scheduler task types and scheduler
+  dispatch live here, not in board-role entry points.
 - `firmware/core/mainboard/main.c` - shared main controller firmware entry
   point. It calls the selected mainboard HAL instead of knowing board pins or
-  MCU details.
+  MCU details. It should only wire startup, runtime setup, and the main loop.
 - `firmware/core/display/main.c` - shared display firmware entry point. It
   calls the selected display board HAL instead of owning LCD, touch, or encoder
-  pins directly.
+  pins directly. It should only wire startup, runtime setup, and the main loop.
 - `firmware/hal/include/` - standard HAL interfaces used by core and reusable
   drivers.
 - `firmware/hal/stm32/` - STM32 implementations for GPIO, timers, PWM, serial,
@@ -115,10 +119,14 @@ make -C firmware print-config BUILD_TARGET=display
   controller with `MAIN_BOARD_NAME` and the display controller with
   `DISPLAY_BOARD_NAME`. Use `make -C firmware mainboard` for the default
   mainboard build, `make -C firmware display` for the default display build, or
-  override names on the command line.
+  override names on the command line. Shared runtime sources under
+  `firmware/core/runtime/` are compiled into each board-role build.
 - `firmware/boards/display/btt_tft35_e3/` - initial GD32F205 bring-up for the
   BTT TFT35 E3 display. It includes startup code, linker script, GDB script,
-  and Makefile targets for ST-Link/OpenOCD flash and debug.
+  and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
+  provides the monotonic millisecond clock used by the shared runtime
+  scheduler, while the board code still owns LCD, touch, encoder, backlight,
+  buzzer, and knob LED hardware details.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD

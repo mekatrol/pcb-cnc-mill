@@ -21,6 +21,12 @@
 - Do not rewrite unrelated files.
 - Do not delete user work.
 - Do not use destructive git commands unless user asks.
+- Keep code split by feature or function. Entry point files such as `main.c`
+  should wire startup and loops only; scheduler, timer, parser, planner,
+  display, input, and driver behavior should live in their own files.
+- Use common runtime names for code shared by mainboard, display, and toolhead
+  builds. Do not add a board-role prefix such as `display_` to scheduler,
+  timer, queue, or task types unless the type is truly display-specific.
 
 ## Firmware Rules
 
@@ -29,6 +35,12 @@
 - Emergency stop path must be simple and fast.
 - Keep interrupt code small.
 - Keep parser, planner, and hardware layers separate.
+- Shared runtime code belongs under `firmware/core/runtime/` unless there is a
+  stronger feature-specific home.
+- Add verbose comments for low-level firmware, scheduler, timer, interrupt,
+  hardware register, and shared runtime code. Public structures, structure
+  fields, callback types, and function headers should explain ownership, units,
+  timing behavior, and hardware boundaries.
 - Put board pins in one clear place.
 - Put machine limits in config, not hidden constants.
 - Use integer or fixed-point math for timing-critical paths when needed.
