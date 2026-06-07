@@ -119,13 +119,16 @@ Purpose:
   pins, LEDs, and any board-local communication pins.
 - Initialize LCD controller, touch controller, LEDs, and local feedback devices.
 - Initialize board-local runtime helpers such as the buzzer chirp driver.
+- Initialize USB and SD card drivers.
 
 Timing:
 
 - Called once before `runtime_scheduler_initialize()`.
 - May block during reset-time hardware setup and LCD controller initialization.
-- Must leave the monotonic millisecond clock running before scheduler
-  initialization.
+- Must leave the monotonic millisecond clock running before
+  `display_initialize_hardware()` returns. The shared display entry point calls
+  `runtime_scheduler_initialize()` after this HAL method returns, so scheduler
+  initialization must be able to read a live millisecond clock immediately.
 
 ### `display_get_monotonic_milliseconds`
 
@@ -139,8 +142,21 @@ Timing:
 - Called by scheduler initialization and every scheduler pass.
 - Must be safe to call from main-loop context and from a board timer or
   interrupt when that role enables preemptive scheduler dispatch.
-- Must tolerate unsigned wrap. Runtime code compares timestamps with wrap-safe
-  signed subtraction.
+- Must tolerate unsigned rollover from the maximum millisecond count back to
+  `0`. Runtime code compares timestamps with wrap-safe signed subtraction, for
+  example `(int32_t)(now_milliseconds - scheduled_milliseconds) >= 0`, so board
+  HAL code should use the same elapsed-time pattern instead of direct `>` or
+  `<` timestamp comparisons.
+- Rollover is expected and should not reset scheduler state. A task scheduled
+  before rollover remains due after the counter wraps as long as the requested
+  delay is less than half the timestamp range.
+- The rollover interval is hardware and configuration dependent: it depends on
+  the timer width, whether the HAL exposes raw timer ticks or a derived
+  millisecond counter, and the clock or prescaler settings used to produce the
+  millisecond time base. The current BTT TFT35 E3 display runs a 120 MHz system
+  clock, reloads SysTick every 120,000 core-clock ticks, and increments a
+  32-bit software millisecond counter once per SysTick interrupt. That counter
+  rolls over every `2^32` milliseconds, which is about 49.7 days of uptime.
 
 ### `display_run_background_tasks`
 

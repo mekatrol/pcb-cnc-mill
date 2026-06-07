@@ -73,7 +73,7 @@ urgent priorities, interrupt-to-task events, bounded queues, and short critical
 sections. Board support selects the hardware details and enabled features.
 
 Board-role hardware abstraction layer (HAL) methods are documented in
-[`API.md`](API.md).
+[`HAL_API.md`](HAL_API.md).
 
 Scheduler task setup, priority guidance, preemption limits, and current
 scheduler limitations are documented in [`SCHEDULER.md`](SCHEDULER.md).
@@ -137,7 +137,7 @@ make -C firmware print-config BUILD_TARGET=display
   and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
   provides the monotonic millisecond clock used by the shared runtime
   scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
-  details stay in the board code. See [`API.md`](API.md) for the display HAL
+  details stay in the board code. See [`HAL_API.md`](HAL_API.md) for the display HAL
   methods that the shared display entry point calls.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
