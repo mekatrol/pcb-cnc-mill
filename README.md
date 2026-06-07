@@ -56,8 +56,49 @@ Codex guidance lives in `.codex/`:
 
 Important rule: every project change should keep this README current.
 
+## Make Commands
+
+Run these commands from the repository root:
+
+```sh
+make -C firmware mainboard
+make -C firmware display
+make -C firmware flash BUILD_TARGET=mainboard
+make -C firmware flash BUILD_TARGET=display
+```
+
+Run these commands from inside `firmware/`:
+
+```sh
+make mainboard
+make display
+make flash BUILD_TARGET=mainboard
+make flash BUILD_TARGET=display
+```
+
+The default boards are `MAIN_BOARD_NAME=btt_skr_mini_e3_v3` and
+`DISPLAY_BOARD_NAME=btt_tft35_e3`. Override them on the command line when
+adding another board:
+
+```sh
+make -C firmware mainboard MAIN_BOARD_NAME=btt_skr_mini_e3_v3
+make -C firmware display DISPLAY_BOARD_NAME=btt_tft35_e3
+```
+
+Check the selected build settings with:
+
+```sh
+make -C firmware print-config
+make -C firmware print-config BUILD_TARGET=display
+```
+
 ## Current Firmware Targets
 
+- `firmware/Makefile` - shared firmware build entry point. It selects the main
+  controller with `MAIN_BOARD_NAME` and the display controller with
+  `DISPLAY_BOARD_NAME`. Use `make -C firmware mainboard` for the default
+  mainboard build, `make -C firmware display` for the default display build, or
+  override names on the command line.
 - `firmware/boards/display/btt_tft35_e3/` - initial GD32F205 bring-up for the
   BTT TFT35 E3 display. It includes startup code, linker script, GDB script,
   and Makefile targets for ST-Link/OpenOCD flash and debug.
