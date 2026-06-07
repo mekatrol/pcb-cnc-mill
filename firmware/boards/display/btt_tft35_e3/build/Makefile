@@ -22,6 +22,9 @@ OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)display$(SEP)$(BOARD_N
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
+STFLASH := st-flash
+
+FLASH_ADDR := 0x08000000
 
 CPUFLAGS := -mcpu=cortex-m3 -mthumb
 CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections
@@ -61,18 +64,16 @@ $(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.s
 .PHONY: flash
 flash: $(OUT_BIN)
 	@echo "[FLASH] Flashing binary with ST-Link"
-	openocd -f interface/stlink.cfg -f target/stm32f2x.cfg \
-		-c "debug_level 1; adapter speed 1800; program $(abspath $(OUT_BIN)) verify reset exit 0x08000000"
+	$(STFLASH) --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
 
 .PHONY: debug
 debug: $(OUT_ELF)
-	@echo "[OPENOCD] Programming and halting"
-	openocd -f interface/stlink.cfg -f target/stm32f2x.cfg \
+	@echo "[OPENOCD] Starting debug session"
+	openocd -f interface/stlink.cfg -c "set CPUTAPID 0x1ba01477" -f target/stm32f2x.cfg \
 		-c "debug_level 1" \
 		-c "adapter speed 1800" \
 		-c "init" \
 		-c "halt" \
-		-c "program {$(abspath $(OUT_ELF))} verify" \
 		-c "reset halt"
 
 .PHONY: clean

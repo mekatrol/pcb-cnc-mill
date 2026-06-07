@@ -2,12 +2,13 @@
 
 Initial board target for the BIGTREETECH TFT35 E3 display controller.
 
-Known STM32 variant:
+Known controller variant on this board:
 
-- MCU: STM32F207VCT6
+- MCU: GigaDevice GD32F205
 - Core: ARM Cortex-M3
 - Flash: 256 KiB
-- RAM: 128 KiB
+- RAM: linked as 64 KiB for conservative direct-SWD bring-up; some BTT GD32
+  firmware configs use 128 KiB, but this ST-Link setup reports 64 KiB
 - Debug and flash: ST-Link over SWD
 
 Build from this folder:
@@ -23,6 +24,13 @@ Flash with ST-Link and OpenOCD:
 make flash
 ```
 
+The GD32F205 can identify to ST-Link tooling as `STM32F1xx_CL`. `make flash`
+uses `st-flash` instead of OpenOCD because this OpenOCD install can halt the
+core with the GD32 TAP ID, but its STM32F2 flash driver refuses the GD32 device
+ID. This bring-up image is linked and written at `0x08000000` for direct SWD
+boot. If the factory BTT bootloader is restored later, the app can be moved back
+to BTT's GD32 TFT35 application offset at `0x08003000`.
+
 Start an OpenOCD debug session:
 
 ```sh
@@ -31,6 +39,31 @@ make debug
 
 Then connect GDB with `debug.gdb`.
 
+The local OpenOCD target script is still `stm32f2x.cfg` because this OpenOCD
+install does not ship a `gd32f2x.cfg`. The Makefile passes `CPUTAPID
+0x1ba01477`, which is the Cortex-M debug TAP ID reported by GD32F205 parts.
+Without that override OpenOCD rejects the target while expecting the STM32F2
+TAP ID `0x2ba01477`.
+
 This is only the bring-up base. Pin mapping, LCD bus, touch controller, SD card,
 encoder, buzzer, serial ports, and bootloader/update behavior still need board
 verification before they are used.
+
+## Current bring-up scope
+
+The first display bring-up code follows BIGTREETECH's
+`BIGTREE_TFT35_E3_V3_0`/`pin_TFT35_E3_V3_0.h` definitions, which inherit the
+TFT35 V3.0 pin map:
+
+- LCD: 16-bit FSMC 8080 bus, command at `0x60000000`, data at `0x60020000`
+- Backlight: `PD12`
+- Buzzer/sounder: `PD13`
+- Rotary encoder: `PA8` / `PC9`
+- Encoder push button: `PC8`
+- Encoder enable: `PC6`
+
+The firmware currently initializes the GPIO/FSMC bus, sends a simple
+ILI9488/ST7796S-compatible LCD wake-up sequence, fills the panel with a test
+color, polls the encoder and button, and chirps the sounder once per debounced
+button press. Touch, SD/USB media, serial, bootloader-offset builds, and full LCD
+driver detection are still intentionally out of scope.

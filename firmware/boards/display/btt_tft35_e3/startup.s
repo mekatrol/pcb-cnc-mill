@@ -70,6 +70,9 @@ copy_data_word:
   b copy_data
 
 call_main:
+  ldr r0, =0xE000ED08
+  ldr r1, =g_pfnVectors
+  str r1, [r0]
   bl main
   b .
 
