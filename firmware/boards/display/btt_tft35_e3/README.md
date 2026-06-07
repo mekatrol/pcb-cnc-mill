@@ -67,6 +67,10 @@ V3.0 pin map. This matches the V3.0.1 board in use here:
 - Touch controller: XPT2046 software SPI on `PE6` CS, `PE5` SCK, `PE4`
   MISO, `PE3` MOSI, and `PC13` pen interrupt
 
+The display bring-up runs the GD32F205 at 120 MHz from the internal IRC8M/2
+PLL source. The external HXTAL pins overlap LCD data pins `PD0` and `PD1`, so
+the LCD bus remaps those pins to EXMC and does not depend on HXTAL after reset.
+
 The firmware currently initializes the GPIO/FSMC bus, probes the TFT controller
 using the same ILI9488/NT35310/ST7796S ID checks used by the upstream
 BIGTREETECH TFT35 V3.0 firmware, runs the matching LCD initialization sequence,

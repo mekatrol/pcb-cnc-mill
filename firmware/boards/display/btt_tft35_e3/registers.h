@@ -1,5 +1,5 @@
-#ifndef __HAL_H__
-#define __HAL_H__
+#ifndef __REGISTERS_H__
+#define __REGISTERS_H__
 
 #define BIT(n) (1u << (n))
 
@@ -61,4 +61,4 @@
 #define LCD_REG MMIO16(0x60FFFFFEu)
 #define LCD_RAM MMIO16(0x61000000u)
 
-#endif // __HAL_H__
+#endif // __REGISTERS_H__
