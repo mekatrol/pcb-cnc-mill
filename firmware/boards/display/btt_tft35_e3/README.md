@@ -75,8 +75,9 @@ The firmware currently initializes the GPIO/FSMC bus, probes the TFT controller
 using the same ILI9488/NT35310/ST7796S ID checks used by the upstream
 BIGTREETECH TFT35 V3.0 firmware, runs the matching LCD initialization sequence,
 fills the panel with a test screen, polls the encoder and button, polls the
-touch controller, and chirps the sounder once per debounced encoder or touch
-button press. Rotating the encoder moves the top RGB color strip in either
+touch controller, and queues a low-priority scheduler chirp of the sounder once
+per debounced encoder or touch button press. Rotating the encoder moves the top
+RGB color strip in either
 direction. The LCD backlight and knob RGB LEDs turn on after reset; during
 normal operation the knob RGB LEDs cycle through a rainbow. The backlight and
 knob LEDs turn off after 30 seconds without a touch, encoder rotation, or

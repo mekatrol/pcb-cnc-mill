@@ -127,8 +127,9 @@ make -C firmware print-config BUILD_TARGET=display
   BTT TFT35 E3 display. It includes startup code, linker script, GDB script,
   and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
   provides the monotonic millisecond clock used by the shared runtime
-  scheduler, while the board code still owns LCD, touch, encoder, backlight,
-  buzzer, and knob LED hardware details.
+  scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
+  details stay in the board code; buzzer chirps are requested by input handling
+  and advanced by a low-priority display scheduler task.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD

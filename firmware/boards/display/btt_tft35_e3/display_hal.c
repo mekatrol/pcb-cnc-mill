@@ -28,6 +28,8 @@ enum
   NEOPIXEL_T1H_TICKS = 128,
   EXMC_ADDRESS_SETUP_TICKS = 15,
   EXMC_DATA_SETUP_TICKS = 255,
+  SYSTICK_RELOAD_TICKS = SYSTEM_CORE_CLOCK_HZ / 1000u,
+  BUZZER_MAX_EDGES_PER_SERVICE = 1,
 };
 
 typedef enum
@@ -51,6 +53,14 @@ static uint32_t next_knob_led_update_ms;
 static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
+static bool buzzer_chirp_active;
+static bool buzzer_chirp_request_pending;
+static bool buzzer_output_high;
+static uint32_t buzzer_requested_half_period_us;
+static uint32_t buzzer_requested_edges;
+static uint32_t buzzer_active_half_period_us;
+static uint32_t buzzer_remaining_edges;
+static uint32_t buzzer_next_edge_us;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -77,6 +87,29 @@ static void delay_cycles(volatile uint32_t cycles)
 static void delay_us_approx(uint32_t us)
 {
   delay_cycles(us * DELAY_LOOP_CYCLES_PER_US);
+}
+
+static uint32_t monotonic_microseconds(void)
+{
+  uint32_t before_milliseconds;
+  uint32_t current_tick_count;
+  uint32_t after_milliseconds;
+
+  // SysTick counts down from SYSTICK_RELOAD_TICKS - 1 to zero once per
+  // millisecond. Read the millisecond counter before and after the down-counter
+  // so a wrap during this function does not combine the old millisecond with
+  // the new sub-millisecond position.
+  do
+  {
+    before_milliseconds = monotonic_milliseconds;
+    current_tick_count = SYST_CVR;
+    after_milliseconds = monotonic_milliseconds;
+  } while (before_milliseconds != after_milliseconds);
+
+  const uint32_t elapsed_ticks = SYSTICK_RELOAD_TICKS - current_tick_count;
+  const uint32_t elapsed_microseconds = elapsed_ticks / SYSTEM_CORE_CLOCK_MHZ;
+
+  return before_milliseconds * 1000u + elapsed_microseconds;
 }
 
 static void interrupts_disable(void)
@@ -420,7 +453,7 @@ static void initialize_clocks_for_display_board(void)
   (void)RCU_AHB1EN;
   (void)RCU_APB1EN;
 
-  SYST_RVR = 120000u - 1u;
+  SYST_RVR = SYSTICK_RELOAD_TICKS - 1u;
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
   knob_led_timer_init();
@@ -870,6 +903,24 @@ static void initialize_lcd_controller(void)
   lcd_draw_boot_screen();
 }
 
+static bool buzzer_has_work(void)
+{
+  return buzzer_chirp_request_pending || buzzer_chirp_active;
+}
+
+static void buzzer_stop_chirp(void)
+{
+  buzzer_chirp_active = false;
+  buzzer_chirp_request_pending = false;
+  buzzer_output_high = false;
+  buzzer_remaining_edges = 0u;
+  buzzer_next_edge_us = 0u;
+  buzzer_active_half_period_us = 0u;
+  buzzer_requested_edges = 0u;
+  buzzer_requested_half_period_us = 0u;
+  gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
+}
+
 static void chirp(uint32_t frequency_hz, uint32_t duration_ms)
 {
   if (frequency_hz == 0 || duration_ms == 0)
@@ -877,16 +928,71 @@ static void chirp(uint32_t frequency_hz, uint32_t duration_ms)
     return;
   }
 
-  const uint32_t half_period_us = 1000000u / (frequency_hz * 2u);
-  const uint32_t toggles = duration_ms * frequency_hz * 2u / 1000u;
-  const uint32_t cycles = (half_period_us * SYSTEM_CORE_CLOCK_MHZ) / 3u;
-
-  for (uint32_t i = 0; i < toggles; i++)
+  uint32_t half_period_us = 1000000u / (frequency_hz * 2u);
+  if (half_period_us == 0)
   {
-    gpio_output_set(GPIOD_BASE, BUZZER_PIN, (i & 1u) != 0);
-    delay_cycles(cycles);
+    half_period_us = 1u;
   }
-  gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
+
+  uint32_t edges = duration_ms * frequency_hz * 2u / 1000u;
+  if (edges < 2u)
+  {
+    edges = 2u;
+  }
+
+  // Queue the newest chirp request and return to the input caller. The
+  // low-priority scheduler task below owns the edge timing so button and touch
+  // handling do not sit in a full-duration busy loop.
+  buzzer_requested_half_period_us = half_period_us;
+  buzzer_requested_edges = edges;
+  buzzer_chirp_request_pending = true;
+}
+
+void display_run_buzzer_tasks(void)
+{
+  if (buzzer_chirp_request_pending)
+  {
+    buzzer_chirp_request_pending = false;
+    buzzer_chirp_active = true;
+    buzzer_output_high = true;
+    buzzer_active_half_period_us = buzzer_requested_half_period_us;
+    buzzer_remaining_edges = buzzer_requested_edges - 1u;
+    buzzer_next_edge_us = monotonic_microseconds() + buzzer_active_half_period_us;
+    gpio_output_set(GPIOD_BASE, BUZZER_PIN, true);
+  }
+
+  if (!buzzer_chirp_active)
+  {
+    return;
+  }
+
+  uint32_t edges_serviced = 0u;
+  while (edges_serviced < BUZZER_MAX_EDGES_PER_SERVICE &&
+         (int32_t)(monotonic_microseconds() - buzzer_next_edge_us) >= 0)
+  {
+    if (buzzer_remaining_edges == 0u)
+    {
+      buzzer_chirp_active = false;
+      break;
+    }
+
+    buzzer_output_high = !buzzer_output_high;
+    gpio_output_set(GPIOD_BASE, BUZZER_PIN, buzzer_output_high);
+    buzzer_remaining_edges--;
+    buzzer_next_edge_us += buzzer_active_half_period_us;
+    edges_serviced++;
+  }
+
+  if (buzzer_chirp_active && buzzer_remaining_edges == 0u &&
+      (int32_t)(monotonic_microseconds() - buzzer_next_edge_us) >= 0)
+  {
+    buzzer_chirp_active = false;
+  }
+
+  if (!buzzer_chirp_active)
+  {
+    buzzer_stop_chirp();
+  }
 }
 
 static uint8_t encoder_sample(void)
@@ -1001,5 +1107,10 @@ void display_run_background_tasks(void)
 
 void display_wait_for_scheduler_tick(void)
 {
+  if (buzzer_has_work())
+  {
+    return;
+  }
+
   delay_ms(1);
 }

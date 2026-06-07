@@ -6,6 +6,11 @@ static void display_background_service_task(void)
   display_run_background_tasks();
 }
 
+static void display_buzzer_service_task(void)
+{
+  display_run_buzzer_tasks();
+}
+
 static runtime_scheduler_task_t display_tasks[] = {
   {
     .name = "display-background-service",
@@ -14,6 +19,14 @@ static runtime_scheduler_task_t display_tasks[] = {
     .enabled = true,
     .next_run_milliseconds = 0u,
     .callback = display_background_service_task,
+  },
+  {
+    .name = "display-buzzer-service",
+    .period_milliseconds = 0u,
+    .priority = 20u,
+    .enabled = true,
+    .next_run_milliseconds = 0u,
+    .callback = display_buzzer_service_task,
   },
 };
 
