@@ -62,12 +62,16 @@ TFT35 V3.0 pin map:
 - Rotary encoder: `PA8` / `PC9`
 - Encoder push button: `PC8`
 - Encoder enable: `PC6`
+- Touch controller: XPT2046 software SPI on `PE6` CS, `PE5` SCK, `PE4`
+  MISO, `PE3` MOSI, and `PC13` pen interrupt
 
 The firmware currently initializes the GPIO/FSMC bus, probes the TFT controller
 using the same ILI9488/NT35310/ST7796S ID checks used by the upstream
 BIGTREETECH TFT35 V3.0 firmware, runs the matching LCD initialization sequence,
-fills the panel with a test screen, polls the encoder and button, and chirps the
-sounder once per debounced button press. If no known LCD controller ID can be
-read, initialization stops, the knob RGB LED flashes red, and the buzzer emits a
-repeating error pulse. Touch, SD/USB media, serial, and bootloader-offset builds
-are still intentionally out of scope.
+fills the panel with a test screen, polls the encoder and button, polls the
+touch controller, and chirps the sounder once per debounced encoder or touch
+button press. Rotating the encoder moves the top RGB color strip in either
+direction. If no known LCD controller ID can be read, initialization stops, the
+knob RGB LED flashes red, and the buzzer emits a repeating error pulse. SD/USB
+media, serial, and bootloader-offset builds are still intentionally out of
+scope.

@@ -58,6 +58,11 @@ enum {
   LCD_BACKLIGHT_PIN = 12,
   KNOB_LED_PIN = 7,     // Upstream BTT TFT35 E3 V3.0: KNOB_LED_COLOR_PIN PC7
   BUZZER_PIN = 13,
+  TOUCH_CS_PIN = 6,     // Upstream BTT TFT35 V3.0: XPT2046_CS PE6
+  TOUCH_SCK_PIN = 5,    // Upstream BTT TFT35 V3.0: XPT2046_SCK PE5
+  TOUCH_MISO_PIN = 4,   // Upstream BTT TFT35 V3.0: XPT2046_MISO PE4
+  TOUCH_MOSI_PIN = 3,   // Upstream BTT TFT35 V3.0: XPT2046_MOSI PE3
+  TOUCH_PEN_PIN = 13,   // Upstream BTT TFT35 V3.0: XPT2046_TPEN PC13
 };
 
 typedef enum {
@@ -73,6 +78,8 @@ static volatile bool encoder_pressed;
 static uint8_t encoder_state;
 static uint8_t button_history = 0xFFu;
 static bool button_reported_pressed;
+static bool touch_reported_pressed;
+static uint8_t color_bar_rotation;
 
 void SysTick_Handler(void) {
   tick_ms++;
@@ -128,6 +135,62 @@ static void gpio_output_set(uint32_t base, uint8_t pin, bool high) {
 
 static bool gpio_input_is_high(uint32_t base, uint8_t pin) {
   return (GPIO_ISTAT(base) & BIT(pin)) != 0;
+}
+
+static void touch_cs_set(bool high) {
+  gpio_output_set(GPIOE_BASE, TOUCH_CS_PIN, high);
+}
+
+static void touch_sck_set(bool high) {
+  gpio_output_set(GPIOE_BASE, TOUCH_SCK_PIN, high);
+}
+
+static void touch_mosi_set(bool high) {
+  gpio_output_set(GPIOE_BASE, TOUCH_MOSI_PIN, high);
+}
+
+static bool touch_miso_is_high(void) {
+  return gpio_input_is_high(GPIOE_BASE, TOUCH_MISO_PIN);
+}
+
+static uint8_t touch_spi_transfer(uint8_t value) {
+  uint8_t received = 0;
+
+  for (uint8_t bit = 0; bit < 8; bit++) {
+    touch_mosi_set((value & 0x80u) != 0);
+    value <<= 1;
+    touch_sck_set(false);
+    delay_us_approx(2);
+    received <<= 1;
+    if (touch_miso_is_high()) {
+      received |= 1u;
+    }
+    touch_sck_set(true);
+    delay_us_approx(2);
+  }
+
+  return received;
+}
+
+static uint16_t touch_read_adc(uint8_t command) {
+  touch_cs_set(false);
+  touch_spi_transfer(command);
+  uint16_t value = touch_spi_transfer(0xFFu);
+  value = (uint16_t)((value << 8) | touch_spi_transfer(0xFFu));
+  touch_cs_set(true);
+
+  return (uint16_t)(value >> 4);
+}
+
+static bool touch_is_pressed(void) {
+  return !gpio_input_is_high(GPIOC_BASE, TOUCH_PEN_PIN);
+}
+
+static bool touch_read_valid_sample(void) {
+  const uint16_t x = touch_read_adc(0xD0u);
+  const uint16_t y = touch_read_adc(0x90u);
+
+  return x > 80u && x < 4016u && y > 80u && y < 4016u;
 }
 
 static void knob_led_raw_set(bool high) {
@@ -210,6 +273,16 @@ static void initialize_display_board_gpio(void) {
   gpio_output_set(GPIOC_BASE, ENCODER_EN_PIN, true);
   configure_gpio_pin_mode(GPIOC_BASE, KNOB_LED_PIN, 0x3);
   knob_led_set_rgb(0, 0, 0);
+
+  configure_gpio_pin_mode(GPIOE_BASE, TOUCH_CS_PIN, 0x3);
+  configure_gpio_pin_mode(GPIOE_BASE, TOUCH_SCK_PIN, 0x3);
+  configure_gpio_pin_mode(GPIOE_BASE, TOUCH_MOSI_PIN, 0x3);
+  configure_gpio_pin_mode(GPIOE_BASE, TOUCH_MISO_PIN, 0x4);
+  configure_gpio_pin_mode(GPIOC_BASE, TOUCH_PEN_PIN, 0x8);
+  touch_cs_set(true);
+  touch_sck_set(true);
+  touch_mosi_set(true);
+  gpio_output_set(GPIOC_BASE, TOUCH_PEN_PIN, true);
 
   // 0x8 is input mode with pull-up/pull-down. Setting the output latch high
   // selects pull-up on this STM32F1/GD32F20x-style GPIO peripheral.
@@ -423,6 +496,31 @@ static void lcd_draw_text(uint16_t x, uint16_t y, const char *text, uint16_t fg,
   }
 }
 
+static void lcd_draw_color_bars(void) {
+  const uint16_t colors[] = {
+      rgb565(210, 48, 48),
+      rgb565(48, 180, 90),
+      rgb565(48, 96, 220),
+      rgb565(255, 190, 48),
+      rgb565(180, 72, 220),
+      rgb565(40, 210, 210),
+  };
+
+  for (uint8_t segment = 0; segment < 6; segment++) {
+    const uint8_t color_index = (uint8_t)((segment + color_bar_rotation) % 6u);
+    lcd_fill_rect((uint16_t)(segment * 80u), 0, 80, 24, colors[color_index]);
+  }
+}
+
+static void lcd_draw_touch_button(bool pressed) {
+  const uint16_t fill = pressed ? rgb565(64, 210, 230) : rgb565(255, 190, 48);
+  const uint16_t text = pressed ? rgb565(12, 18, 28) : rgb565(12, 18, 28);
+
+  lcd_fill_rect(98, 214, 284, 58, fill);
+  lcd_fill_rect(102, 218, 276, 50, pressed ? rgb565(96, 235, 255) : rgb565(255, 205, 82));
+  lcd_draw_text(150, 232, "TOUCH CHIRP", text, pressed ? rgb565(96, 235, 255) : rgb565(255, 205, 82), 2);
+}
+
 static void lcd_draw_boot_screen(void) {
   const uint16_t bg = rgb565(12, 18, 28);
   const uint16_t white = rgb565(255, 255, 255);
@@ -430,15 +528,14 @@ static void lcd_draw_boot_screen(void) {
   const uint16_t cyan = rgb565(64, 210, 230);
 
   lcd_fill(bg);
-  lcd_fill_rect(0, 0, 160, 24, rgb565(210, 48, 48));
-  lcd_fill_rect(160, 0, 160, 24, rgb565(48, 180, 90));
-  lcd_fill_rect(320, 0, 160, 24, rgb565(48, 96, 220));
+  lcd_draw_color_bars();
   lcd_fill_rect(0, 296, 480, 24, amber);
 
   lcd_draw_text(54, 70, "PCB CNC MILL", white, bg, 4);
   lcd_draw_text(84, 128, "BTT TFT35 E3", cyan, bg, 3);
-  lcd_draw_text(120, 174, "GD32F205", amber, bg, 3);
-  lcd_draw_text(92, 238, "ENCODER BUTTON CHIRPS", bg, amber, 2);
+  lcd_draw_text(72, 174, "DIAL ROTATES TOP RGB", amber, bg, 2);
+  lcd_draw_touch_button(false);
+  lcd_draw_text(92, 300, "ENCODER BUTTON CHIRPS", bg, amber, 2);
 }
 
 static void lcd_initialize_ili9488(void) {
@@ -581,7 +678,7 @@ static uint8_t encoder_sample(void) {
   return (uint8_t)((a << 1) | b);
 }
 
-static void encoder_poll(void) {
+static int8_t encoder_poll(void) {
   static const int8_t transitions[16] = {
       0, -1, 1, 0,
       1, 0, 0, -1,
@@ -591,7 +688,8 @@ static void encoder_poll(void) {
 
   const uint8_t sample = encoder_sample();
   const uint8_t index = (uint8_t)((encoder_state << 2) | sample);
-  encoder_position += transitions[index];
+  const int8_t delta = transitions[index];
+  encoder_position += delta;
   encoder_state = sample;
 
   button_history = (uint8_t)((button_history << 1) |
@@ -605,6 +703,21 @@ static void encoder_poll(void) {
     button_reported_pressed = false;
     encoder_pressed = false;
   }
+
+  return delta;
+}
+
+static void touch_poll(void) {
+  if (touch_is_pressed()) {
+    if (!touch_reported_pressed && touch_read_valid_sample()) {
+      touch_reported_pressed = true;
+      lcd_draw_touch_button(true);
+      chirp(2200, 45);
+    }
+  } else if (touch_reported_pressed) {
+    touch_reported_pressed = false;
+    lcd_draw_touch_button(false);
+  }
 }
 
 int main(void) {
@@ -617,7 +730,15 @@ int main(void) {
   encoder_state = encoder_sample();
 
   while (1) {
-    encoder_poll();
+    const int8_t encoder_delta = encoder_poll();
+    if (encoder_delta > 0) {
+      color_bar_rotation = (uint8_t)((color_bar_rotation + 1u) % 6u);
+      lcd_draw_color_bars();
+    } else if (encoder_delta < 0) {
+      color_bar_rotation = (uint8_t)((color_bar_rotation + 5u) % 6u);
+      lcd_draw_color_bars();
+    }
+    touch_poll();
     delay_ms(1);
   }
 }
