@@ -14,13 +14,18 @@
 
 #define AFIO_BASE (APB2PERIPH_BASE + 0x0000u)
 #define RCU_BASE (AHB1PERIPH_BASE + 0x1000u)
+#define FMC_BASE (AHB1PERIPH_BASE + 0x2000u)
 #define GPIO_BASE (APB2PERIPH_BASE + 0x0800u)
 #define TIMER_BASE APB1PERIPH_BASE
 
+#define RCU_CTL MMIO32(RCU_BASE + 0x00u)
+#define RCU_CFG0 MMIO32(RCU_BASE + 0x04u)
+#define RCU_CFG1 MMIO32(RCU_BASE + 0x2Cu)
 #define AFIO_PCF0 MMIO32(AFIO_BASE + 0x04u)
 #define RCU_AHB1EN MMIO32(RCU_BASE + 0x14u)
 #define RCU_APB2EN MMIO32(RCU_BASE + 0x18u)
 #define RCU_APB1EN MMIO32(RCU_BASE + 0x1Cu)
+#define FMC_WS MMIO32(FMC_BASE + 0x00u)
 
 #define GPIOA_BASE (GPIO_BASE + 0x0000u)
 #define GPIOC_BASE (GPIO_BASE + 0x0800u)
@@ -58,6 +63,10 @@
 
 enum
 {
+  SYSTEM_CORE_CLOCK_HZ = 120000000,
+  SYSTEM_CORE_CLOCK_MHZ = 120,
+  DELAY_LOOP_CYCLES_PER_US = 45,
+  HXTAL_STARTUP_TIMEOUT = 0x000FFFFF,
   ENCODER_A_PIN = 8,   // Upstream BTT TFT35 V3.0: LCD_ENCA_PIN PA8
   ENCODER_B_PIN = 9,   // Upstream BTT TFT35 V3.0: LCD_ENCB_PIN PC9
   ENCODER_BTN_PIN = 8, // Upstream BTT TFT35 V3.0: LCD_BTN_PIN PC8
@@ -71,6 +80,14 @@ enum
   TOUCH_MOSI_PIN = 3,  // Upstream BTT TFT35 V3.0: XPT2046_MOSI PE3
   TOUCH_PEN_PIN = 13,  // Upstream BTT TFT35 V3.0: XPT2046_TPEN PC13
   KNOB_LED_PIXELS = 2, // Upstream GD TFT35 E3 V3.0: NEOPIXEL_PIXELS 2
+  // Diagnostic mode holds LED0 red and LED1 green so hardware/timing faults
+  // are easier to distinguish from the normal rainbow animation.
+  KNOB_LED_DIAGNOSTIC_PATTERN = 0,
+  // Match upstream Knob_LED.c's integer math with the 120 MHz APB1 timer
+  // clock from the GD32F20x 120 MHz HXTAL clock setup.
+  NEOPIXEL_TIMER_PERIOD_TICKS = 150,
+  NEOPIXEL_T0H_TICKS = 21,
+  NEOPIXEL_T1H_TICKS = 128,
 };
 
 typedef enum
@@ -94,6 +111,8 @@ static uint32_t next_knob_led_update_ms;
 static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
+
+static const bool use_fast_clock = false;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -119,7 +138,14 @@ static void delay_cycles(volatile uint32_t cycles)
 
 static void delay_us_approx(uint32_t us)
 {
-  delay_cycles(us * 3u);
+  if (use_fast_clock == true)
+  {
+    delay_cycles(us * DELAY_LOOP_CYCLES_PER_US);
+  }
+  else
+  {
+    delay_cycles(us * 3u);
+  }
 }
 
 static void interrupts_disable(void)
@@ -264,7 +290,12 @@ static void knob_led_raw_set(bool high)
 
 static void knob_led_write_bit(bool high_bit)
 {
-  const uint32_t high_ticks = high_bit ? 6u : 3u;
+  uint32_t high_ticks = high_bit ? 6u : 3u;
+
+  if (use_fast_clock == true)
+  {
+    high_ticks = high_bit ? NEOPIXEL_T1H_TICKS : NEOPIXEL_T0H_TICKS;
+  }
 
   TIMER_CNT(TIMER5_BASE) = 0;
   TIMER_INTF(TIMER5_BASE) = 0;
@@ -276,6 +307,7 @@ static void knob_led_write_bit(bool high_bit)
   while ((TIMER_INTF(TIMER5_BASE) & BIT(0)) == 0)
   {
   }
+  TIMER_INTF(TIMER5_BASE) = 0;
 }
 
 static void knob_led_write_byte(uint8_t value)
@@ -291,6 +323,19 @@ static void knob_led_write_rgb(uint8_t red, uint8_t green, uint8_t blue)
   knob_led_write_byte(green);
   knob_led_write_byte(red);
   knob_led_write_byte(blue);
+}
+
+static void knob_led_begin_frame(void)
+{
+  interrupts_disable();
+  TIMER_CTL0(TIMER5_BASE) |= BIT(0);
+}
+
+static void knob_led_end_frame(void)
+{
+  TIMER_CTL0(TIMER5_BASE) &= ~BIT(0);
+  interrupts_enable();
+  delay_us_approx(300);
 }
 
 static uint8_t scale_color(uint8_t value)
@@ -324,18 +369,47 @@ static void rainbow_color(uint8_t phase, uint8_t *red, uint8_t *green, uint8_t *
 
 static void knob_led_show_solid(uint8_t red, uint8_t green, uint8_t blue)
 {
-  interrupts_disable();
+  if (use_fast_clock == true)
+  {
+    knob_led_begin_frame();
+  }
+  else
+  {
+    interrupts_disable();
+  }
   for (uint8_t pixel = 0; pixel < KNOB_LED_PIXELS; pixel++)
   {
     knob_led_write_rgb(red, green, blue);
   }
-  interrupts_enable();
-  delay_us_approx(300);
+  if (use_fast_clock == true)
+  {
+    knob_led_end_frame();
+  }
+  else
+  {
+    interrupts_enable();
+    delay_us_approx(300);
+  }
+}
+
+static void knob_led_show_diagnostic_pattern(void)
+{
+  knob_led_begin_frame();
+  knob_led_write_rgb(80, 0, 0);
+  knob_led_write_rgb(0, 80, 0);
+  knob_led_end_frame();
 }
 
 static void knob_led_show_rainbow(void)
 {
-  interrupts_disable();
+  if (use_fast_clock == true)
+  {
+    knob_led_begin_frame();
+  }
+  else
+  {
+    interrupts_disable();
+  }
   for (uint8_t pixel = 0; pixel < KNOB_LED_PIXELS; pixel++)
   {
     uint8_t red;
@@ -344,12 +418,23 @@ static void knob_led_show_rainbow(void)
     rainbow_color((uint8_t)(knob_led_rainbow_phase + pixel * 64u), &red, &green, &blue);
     knob_led_write_rgb(red, green, blue);
   }
-  interrupts_enable();
-  delay_us_approx(300);
+  if (use_fast_clock == true)
+  {
+    knob_led_end_frame();
+  }
+  else
+  {
+    interrupts_enable();
+    delay_us_approx(300);
+  }
 }
 
 static void knob_led_update_rainbow(void)
 {
+  if (use_fast_clock == true && KNOB_LED_DIAGNOSTIC_PATTERN)
+  {
+    return;
+  }
   if (!knob_led_enabled || (int32_t)(next_knob_led_update_ms - tick_ms) > 0)
   {
     return;
@@ -364,7 +449,14 @@ static void knob_led_set_enabled(bool enabled)
 {
   if (enabled)
   {
-    knob_led_show_rainbow();
+    if (use_fast_clock == true && KNOB_LED_DIAGNOSTIC_PATTERN)
+    {
+      knob_led_show_diagnostic_pattern();
+    }
+    else
+    {
+      knob_led_show_rainbow();
+    }
     next_knob_led_update_ms = tick_ms + 80u;
   }
   else
@@ -378,7 +470,14 @@ static void knob_led_timer_init(void)
 {
   TIMER_CTL0(TIMER5_BASE) = 0;
   TIMER_PSC(TIMER5_BASE) = 0;
-  TIMER_CAR(TIMER5_BASE) = 9u;
+  if (use_fast_clock == true)
+  {
+    TIMER_CAR(TIMER5_BASE) = NEOPIXEL_TIMER_PERIOD_TICKS - 1u;
+  }
+  else
+  {
+    TIMER_CAR(TIMER5_BASE) = 9u;
+  }
   TIMER_CNT(TIMER5_BASE) = 0;
   TIMER_INTF(TIMER5_BASE) = 0;
   TIMER_CTL0(TIMER5_BASE) = BIT(0);
@@ -410,8 +509,60 @@ static void knob_led_show_error_forever(void)
   }
 }
 
+static void configure_system_clock_120mhz(void)
+{
+  FMC_WS = (FMC_WS & ~0x7u) | 0x2u;
+
+  RCU_CTL |= BIT(16); // HXTALEN
+
+  uint32_t timeout = 0;
+  while ((RCU_CTL & BIT(17)) == 0 && timeout < HXTAL_STARTUP_TIMEOUT)
+  {
+    timeout++;
+  }
+  if ((RCU_CTL & BIT(17)) == 0)
+  {
+    while (1)
+    {
+    }
+  }
+
+  // AHB = SYSCLK, APB2 = AHB, APB1 = AHB / 2. This is the same 120 MHz
+  // HXTAL clock path used by upstream GD32F20x CMSIS startup.
+  RCU_CFG0 &= ~((0xFu << 4) | (0x7u << 8) | (0x7u << 11));
+  RCU_CFG0 |= (4u << 8);
+
+  // CK_PREDIV0 = HXTAL / 2 * 12 / 4 = 12 MHz.
+  RCU_CFG1 &= ~((0xFu << 0) | (0xFu << 4) | (0xFu << 8) | BIT(16));
+  RCU_CFG1 |= BIT(16) | (3u << 0) | (1u << 4) | (10u << 8);
+
+  // CK_PLL = CK_PREDIV0 * 10 = 120 MHz.
+  RCU_CFG0 &= ~(BIT(16) | BIT(17) | (0xFu << 18) | BIT(29));
+  RCU_CFG0 |= BIT(16) | (8u << 18);
+
+  RCU_CTL |= BIT(26); // PLL1EN
+  while ((RCU_CTL & BIT(27)) == 0)
+  {
+  }
+
+  RCU_CTL |= BIT(24); // PLLEN
+  while ((RCU_CTL & BIT(25)) == 0)
+  {
+  }
+
+  RCU_CFG0 = (RCU_CFG0 & ~0x3u) | 0x2u;
+  while ((RCU_CFG0 & (0x3u << 2)) != (0x2u << 2))
+  {
+  }
+}
+
 static void initialize_clocks_for_display_board(void)
 {
+  if (use_fast_clock == true)
+  {
+    configure_system_clock_120mhz();
+  }
+
   // RCU is GigaDevice's Reset and Clock Unit. These bits enable the Alternate
   // Function I/O block plus GPIO ports A, C, D, and E.
   RCU_APB2EN |= BIT(0) | BIT(2) | BIT(4) | BIT(5) | BIT(6);
@@ -423,7 +574,14 @@ static void initialize_clocks_for_display_board(void)
   (void)RCU_AHB1EN;
   (void)RCU_APB1EN;
 
-  SYST_RVR = 8000u - 1u; // Reset clock is GD32 IRC8M.
+  if (use_fast_clock == true)
+  {
+    SYST_RVR = 120000u - 1u;
+  }
+  else
+  {
+    SYST_RVR = 8000u - 1u; // Reset clock is GD32 IRC8M.
+  }
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
   knob_led_timer_init();
@@ -492,11 +650,19 @@ static void initialize_lcd_parallel_external_memory_bus(void)
   }
 
   EXMC_SNCTL0 = 0;
-  EXMC_SNTCFG0 = (15u << 8) | // DATAST: deliberately slow for LCD bring-up
-                 (1u << 0);   // ADDSET
-  EXMC_SNCTL0 = BIT(12) |     // Write enable
-                BIT(4) |      // 16-bit data bus, SRAM-like async device
-                BIT(0);       // Bank enable
+  if (use_fast_clock == true)
+  {
+    EXMC_SNTCFG0 = (255u << 8) | // DATAST: deliberately slow for LCD bring-up
+                   (15u << 0);   // ADDSET
+  }
+  else
+  {
+    EXMC_SNTCFG0 = (15u << 8) | // DATAST: deliberately slow for LCD bring-up
+                   (1u << 0);   // ADDSET
+  }
+  EXMC_SNCTL0 = BIT(12) | // Write enable
+                BIT(4) |  // 16-bit data bus, SRAM-like async device
+                BIT(0);   // Bank enable
 }
 
 static void lcd_write_command(uint16_t command)
@@ -879,7 +1045,12 @@ static void chirp(uint32_t frequency_hz, uint32_t duration_ms)
 
   const uint32_t half_period_us = 1000000u / (frequency_hz * 2u);
   const uint32_t toggles = duration_ms * frequency_hz * 2u / 1000u;
-  const uint32_t cycles = (half_period_us * 8u) / 3u;
+  uint32_t cycles = (half_period_us * 8u) / 3u;
+
+  if (use_fast_clock == true)
+  {
+    cycles = (half_period_us * SYSTEM_CORE_CLOCK_MHZ) / 3u;
+  }
 
   for (uint32_t i = 0; i < toggles; i++)
   {
