@@ -15,7 +15,9 @@ Main job:
 
 ## Approach
 
-Use a layered design.
+Use a layered design with a shared bare-metal runtime. All board types use the
+same runtime shape: hardware interrupts for urgent work, hardware timers for
+accurate timing, and a cooperative scheduler for normal firmware work.
 
 1. Host link
    - Handles serial or USB transport.
@@ -46,6 +48,105 @@ Use a layered design.
    - Wraps GPIO, timers, PWM, ADC, EEPROM/flash, and interrupts.
    - Keeps board-specific code away from planner and parser code.
 
+7. Cooperative scheduler
+   - Runs small non-blocking tasks from the main loop.
+   - Owns task timing for command processing, screen refresh, button scanning,
+     status reports, storage polling, and communication housekeeping.
+   - Does not own step pulse timing.
+   - Lets each task do bounded work, then return.
+   - Dispatches queued work items by priority when they are ready to run.
+
+## Board Runtime Model
+
+Use bare metal plus interrupts plus a cooperative scheduler. Do not make an
+RTOS part of the base design.
+
+Common runtime code should be written once and reused by mainboards, displays,
+and toolheads. Board-specific code only selects pins, timers, buses, clocks,
+interrupt priorities, and enabled features.
+
+- Mainboard firmware uses the common runtime for host command handling, machine
+  state, motion planning, step generation, spindle control, limits, probe input,
+  USB or serial transport, SD card access, and CAN communication.
+- Display firmware uses the same scheduler and driver model for LCD refresh,
+  touch input, encoder input, buttons, buzzer, LEDs, USB or serial transport,
+  SD card access, and CAN or serial communication with the mainboard.
+- Toolhead firmware uses the same scheduler and driver model for CAN
+  communication, local IO, sensors, fans, heaters if fitted, probe input, and
+  any local driver control.
+
+The shared runtime should provide:
+
+- Startup hooks for board clock, memory, and peripheral setup.
+- A cooperative task table with task name, period, priority order, and callback.
+- Priority work queues for one-shot commands such as chirp, draw text, parse a
+  received command, enqueue a planned move, or send a status frame.
+- Monotonic tick time for non-critical task scheduling.
+- Interrupt registration or board-level interrupt hooks.
+- Lightweight event flags or queues for communication between interrupts and
+  scheduled tasks.
+- Critical-section helpers for short shared-state updates.
+- Watchdog feeding from a known safe scheduler point.
+
+## Scheduler And Work Queues
+
+Use two related mechanisms:
+
+- Periodic scheduler tasks run service code at fixed or minimum intervals. These
+  tasks poll drivers, refill queues, debounce inputs, refresh display regions,
+  and process communication state machines.
+- Priority work queues hold one-shot work items that can be submitted and then
+  forgotten by the caller. The scheduler dispatches ready work items in priority
+  order, subject to a small per-loop work budget.
+
+Queued work items should be small commands, not long blocking operations.
+
+Examples:
+
+- A `chirp` work item starts or updates the buzzer state, then returns. A timer
+  or later scheduler tick turns the buzzer off.
+- A `draw text` work item copies text into a display command queue or marks a
+  display region dirty, then returns. The display refresh task performs bounded
+  drawing work over later scheduler passes.
+- A `move stepper` work item means enqueue a validated motion command or planner
+  segment. It must not directly bit-bang step pulses. Hardware timer code emits
+  the actual step pulses from the step segment queue.
+- A button, encoder, touch, probe, or limit input event carries an event type,
+  timestamp, source, and value. Debounce and filtering happen before the event
+  changes machine state.
+
+Use fixed priority bands so behavior is predictable:
+
+- Emergency and safety work: alarm state, emergency stop follow-up, hard limit
+  follow-up, watchdog fault handling.
+- Motion service work: planner queue refill, step generator starvation checks,
+  feed hold, resume, and homing state progress.
+- User input work: debounced buttons, encoder turns, touch events, feed hold,
+  cancel, jog requests, and menu selection.
+- Communication work: USB, serial, CAN receive and transmit handling.
+- Display and feedback work: display commands, buzzer chirps, LEDs, and status
+  indicators.
+- Background work: SD card directory reads, logging, config save, diagnostics,
+  and low-rate status reports.
+
+Queue rules:
+
+- Queues are bounded. Full queues must return a clear result to the caller.
+- Safety and motion queues reserve space so background or display work cannot
+  block urgent work.
+- Work items may have a `not_before` time for delayed work, debounce expiry,
+  chirp off timing, and display pacing.
+- Work items may have a deadline when late work is worse than dropped work.
+- Coalescing is allowed for display redraws, repeated status reports, and input
+  state updates where only the latest value matters.
+- No queued item may wait on USB, SD card, CAN, display transfer, button input,
+  or another queued item.
+- The scheduler should limit how much work it runs per pass so low priority work
+  cannot make the main loop unresponsive.
+- Starvation protection should allow occasional lower-priority work to run when
+  high-priority work remains busy, except when the machine is in an emergency or
+  motion-critical state.
+
 ## Safety Model
 
 Safety first for all control code.
@@ -60,12 +161,22 @@ Safety first for all control code.
 
 ## Timing Model
 
-High-level code may run in the main loop. Step pulse generation must use precise timing.
+High-level code runs through the cooperative scheduler. Step pulse generation
+must use precise hardware timing and must not depend on scheduler latency.
 
 - Interrupt or timer code stays small.
 - Planner fills a queue.
 - Step generator consumes the queue.
 - Shared state between interrupt and main loop must be minimal and protected.
+- Scheduler tasks must not block while waiting for USB, SD card, CAN, display,
+  touch, button, serial, or storage work.
+- Slow peripherals are split into short state-machine steps.
+- Button debounce, screen updates, status reports, and storage polling use
+  scheduler periods, not busy waits.
+- Emergency stop and hard limit handling use direct interrupt or hardware paths
+  where practical.
+- Motion queue refill is scheduled often enough that the step generator does not
+  starve during worst-case communication, screen, or storage activity.
 
 ## Configuration
 

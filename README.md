@@ -6,6 +6,12 @@ Firmware for a PCB milling CNC.
 This firmware is for hobby PCB mill control. It takes ideas from Klipper,
 Marlin, and GRBL: host command handling, G-code parsing, planned motion,
 precise step generation, spindle control, and clear machine safety states.
+The base execution model is bare metal plus interrupts plus a cooperative
+scheduler. Hardware timers own precise step timing; the scheduler runs bounded
+non-blocking work for communication, storage, display, input, and housekeeping.
+One-shot work such as chirps, display commands, user input events, communication
+messages, and motion command enqueueing runs through bounded priority queues.
+Stepper pulse timing still stays in hardware timer code.
 
 ## Firmware Layout
 
@@ -51,6 +57,11 @@ Rule of thumb: core code should not know a board brand exists. Board folders
 hold pins, ports, MCU quirks, and feature flags. HAL folders hold processor
 family implementations. Driver folders hold standard protocol and device code
 once. Machine config ties selected hardware to one CNC build.
+
+Mainboard, display, and toolhead firmware should share the same runtime model:
+common startup flow, cooperative task table, interrupt-to-task events, bounded
+queues, and short critical sections. Board support selects the hardware details
+and enabled features.
 
 ## Codex Project Notes
 
