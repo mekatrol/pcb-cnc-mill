@@ -41,10 +41,14 @@
 #define SYST_RVR MMIO32(SYSTICK_BASE + 0x04u)
 #define SYST_CVR MMIO32(SYSTICK_BASE + 0x08u)
 
-// The LCD controller is memory-mapped through EXMC bank 0. Writes to LCD_REG
-// send command bytes; writes to LCD_RAM send command parameters or pixel data.
-#define LCD_REG MMIO16(0x60000000u)
-#define LCD_RAM MMIO16(0x60020000u)
+#define DEMCR MMIO32(0xE000EDFCu)
+#define DWT_CTRL MMIO32(0xE0001000u)
+#define DWT_CYCCNT MMIO32(0xE0001004u)
+
+// The LCD controller is memory-mapped through EXMC bank 0. These addresses
+// match BTT's GD32F20x HAL mapping for PE2/FSMC_A23 as the LCD RS line.
+#define LCD_REG MMIO16(0x60FFFFFEu)
+#define LCD_RAM MMIO16(0x61000000u)
 
 enum {
   ENCODER_A_PIN = 8,    // Upstream BTT TFT35 V3.0: LCD_ENCA_PIN PA8
@@ -52,8 +56,16 @@ enum {
   ENCODER_BTN_PIN = 8,  // Upstream BTT TFT35 V3.0: LCD_BTN_PIN PC8
   ENCODER_EN_PIN = 6,   // Upstream BTT TFT35 V3.0: LCD_ENC_EN_PIN PC6
   LCD_BACKLIGHT_PIN = 12,
+  KNOB_LED_PIN = 7,     // Upstream BTT TFT35 E3 V3.0: KNOB_LED_COLOR_PIN PC7
   BUZZER_PIN = 13,
 };
+
+typedef enum {
+  LCD_CONTROLLER_UNKNOWN,
+  LCD_CONTROLLER_ILI9488,
+  LCD_CONTROLLER_NT35310,
+  LCD_CONTROLLER_ST7796S,
+} lcd_controller_t;
 
 static volatile uint32_t tick_ms;
 static volatile int32_t encoder_position;
@@ -77,6 +89,29 @@ static void delay_cycles(volatile uint32_t cycles) {
   }
 }
 
+static void delay_us_approx(uint32_t us) {
+  delay_cycles(us * 3u);
+}
+
+static void cycle_counter_init(void) {
+  DEMCR |= BIT(24);
+  DWT_CYCCNT = 0;
+  DWT_CTRL |= BIT(0);
+}
+
+static void wait_until_cycle(uint32_t cycle) {
+  while ((int32_t)(cycle - DWT_CYCCNT) > 0) {
+  }
+}
+
+static void interrupts_disable(void) {
+  __asm volatile ("cpsid i" ::: "memory");
+}
+
+static void interrupts_enable(void) {
+  __asm volatile ("cpsie i" ::: "memory");
+}
+
 static void configure_gpio_pin_mode(uint32_t base, uint8_t pin, uint32_t config) {
   volatile uint32_t *ctl = (pin < 8) ? &GPIO_CTL0(base) : &GPIO_CTL1(base);
   const uint8_t shift = (pin & 7u) * 4u;
@@ -95,6 +130,59 @@ static bool gpio_input_is_high(uint32_t base, uint8_t pin) {
   return (GPIO_ISTAT(base) & BIT(pin)) != 0;
 }
 
+static void knob_led_raw_set(bool high) {
+  gpio_output_set(GPIOC_BASE, KNOB_LED_PIN, high);
+}
+
+static void knob_led_write_bit(bool high_bit) {
+  const uint32_t start = DWT_CYCCNT;
+  const uint32_t high_cycles = high_bit ? 17u : 3u;
+  const uint32_t total_cycles = 20u;
+
+  knob_led_raw_set(true);
+  wait_until_cycle(start + high_cycles);
+  knob_led_raw_set(false);
+  wait_until_cycle(start + total_cycles);
+}
+
+static void knob_led_write_byte(uint8_t value) {
+  for (int8_t bit = 7; bit >= 0; bit--) {
+    knob_led_write_bit((value & BIT(bit)) != 0);
+  }
+}
+
+static void knob_led_set_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+  interrupts_disable();
+  for (uint8_t pixel = 0; pixel < 4; pixel++) {
+    knob_led_write_byte(green);
+    knob_led_write_byte(red);
+    knob_led_write_byte(blue);
+  }
+  interrupts_enable();
+  delay_us_approx(300);
+}
+
+static void error_buzzer_pulse(void) {
+  for (uint8_t pulse = 0; pulse < 3; pulse++) {
+    for (uint32_t edge = 0; edge < 260u; edge++) {
+      gpio_output_set(GPIOD_BASE, BUZZER_PIN, (edge & 1u) != 0);
+      delay_cycles(320u);
+    }
+    gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
+    delay_ms(120);
+  }
+}
+
+static void knob_led_show_error_forever(void) {
+  while (1) {
+    knob_led_set_rgb(80, 0, 0);
+    error_buzzer_pulse();
+    delay_ms(180);
+    knob_led_set_rgb(0, 0, 0);
+    delay_ms(180);
+  }
+}
+
 static void initialize_clocks_for_display_board(void) {
   // RCU is GigaDevice's Reset and Clock Unit. These bits enable the Alternate
   // Function I/O block plus GPIO ports A, C, D, and E.
@@ -108,6 +196,7 @@ static void initialize_clocks_for_display_board(void) {
   SYST_RVR = 8000u - 1u;  // Reset clock is GD32 IRC8M.
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
+  cycle_counter_init();
 }
 
 static void initialize_display_board_gpio(void) {
@@ -119,6 +208,8 @@ static void initialize_display_board_gpio(void) {
 
   configure_gpio_pin_mode(GPIOC_BASE, ENCODER_EN_PIN, 0x3);
   gpio_output_set(GPIOC_BASE, ENCODER_EN_PIN, true);
+  configure_gpio_pin_mode(GPIOC_BASE, KNOB_LED_PIN, 0x3);
+  knob_led_set_rgb(0, 0, 0);
 
   // 0x8 is input mode with pull-up/pull-down. Setting the output latch high
   // selects pull-up on this STM32F1/GD32F20x-style GPIO peripheral.
@@ -137,8 +228,8 @@ static void configure_lcd_external_memory_bus_pin(uint32_t base, uint8_t pin) {
 }
 
 static void initialize_lcd_parallel_external_memory_bus(void) {
-  const uint8_t port_d_lcd_bus_pins[] = {0, 1, 4, 5, 7, 8, 9, 10, 11, 14, 15};
-  const uint8_t port_e_lcd_data_pins[] = {7, 8, 9, 10, 11, 12, 13, 14, 15};
+  const uint8_t port_d_lcd_bus_pins[] = {0, 1, 4, 5, 7, 8, 9, 10, 14, 15};
+  const uint8_t port_e_lcd_bus_pins[] = {2, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
   // PD0 and PD1 normally overlap oscillator pins. This remap connects them to
   // GPIO/EXMC so the LCD can use the full 16-bit parallel data bus.
@@ -148,15 +239,13 @@ static void initialize_lcd_parallel_external_memory_bus(void) {
     configure_lcd_external_memory_bus_pin(GPIOD_BASE, port_d_lcd_bus_pins[i]);
   }
 
-  for (uint32_t i = 0; i < sizeof(port_e_lcd_data_pins); i++) {
-    configure_lcd_external_memory_bus_pin(GPIOE_BASE, port_e_lcd_data_pins[i]);
+  for (uint32_t i = 0; i < sizeof(port_e_lcd_bus_pins); i++) {
+    configure_lcd_external_memory_bus_pin(GPIOE_BASE, port_e_lcd_bus_pins[i]);
   }
 
   EXMC_SNCTL0 = 0;
-  EXMC_SNTCFG0 = (1u << 28) |  // Access mode B
-                 (15u << 8) |  // DATAST: deliberately slow for LCD bring-up
-                 (3u << 4) |   // ADDHLD
-                 (3u << 0);    // ADDSET
+  EXMC_SNTCFG0 = (15u << 8) |  // DATAST: deliberately slow for LCD bring-up
+                 (1u << 0);    // ADDSET
   EXMC_SNCTL0 = BIT(12) |      // Write enable
                 BIT(4) |       // 16-bit data bus, SRAM-like async device
                 BIT(0);        // Bank enable
@@ -170,9 +259,47 @@ static void lcd_write_data(uint16_t data) {
   LCD_RAM = data;
 }
 
+static uint16_t lcd_read_data(void) {
+  return LCD_RAM;
+}
+
 static void lcd_command_data(uint16_t command, uint16_t data) {
   lcd_write_command(command);
   lcd_write_data(data);
+}
+
+static uint16_t lcd_read_id_d3(void) {
+  lcd_write_command(0xD3u);
+  (void)lcd_read_data();  // Dummy read
+  (void)lcd_read_data();
+  uint16_t id = lcd_read_data();
+  id <<= 8;
+  id |= lcd_read_data();
+  return id;
+}
+
+static uint16_t lcd_read_id_d4(void) {
+  lcd_write_command(0xD4u);
+  (void)lcd_read_data();  // Dummy read
+  (void)lcd_read_data();
+  uint16_t id = lcd_read_data();
+  id <<= 8;
+  id |= lcd_read_data();
+  return id;
+}
+
+static lcd_controller_t lcd_detect_controller(void) {
+  const uint16_t d3_id = lcd_read_id_d3();
+  if (d3_id == 0x9488u) {
+    return LCD_CONTROLLER_ILI9488;
+  }
+  if (lcd_read_id_d4() == 0x5310u) {
+    return LCD_CONTROLLER_NT35310;
+  }
+  if (d3_id == 0x7796u) {
+    return LCD_CONTROLLER_ST7796S;
+  }
+  return LCD_CONTROLLER_UNKNOWN;
 }
 
 static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
@@ -314,6 +441,109 @@ static void lcd_draw_boot_screen(void) {
   lcd_draw_text(92, 238, "ENCODER BUTTON CHIRPS", bg, amber, 2);
 }
 
+static void lcd_initialize_ili9488(void) {
+  lcd_write_command(0xC0u);
+  lcd_write_data(0x0Cu);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xC1u, 0x44u);
+  lcd_write_command(0xC5u);
+  lcd_write_data(0x00u);
+  lcd_write_data(0x16u);
+  lcd_write_data(0x80u);
+  lcd_command_data(0x36u, 0x28u);
+  lcd_command_data(0x3Au, 0x55u);
+  lcd_command_data(0xB0u, 0x00u);
+  lcd_command_data(0xB1u, 0xB0u);
+  lcd_command_data(0xB4u, 0x02u);
+  lcd_write_command(0xB6u);
+  lcd_write_data(0x02u);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xE9u, 0x00u);
+  lcd_write_command(0xF7u);
+  lcd_write_data(0xA9u);
+  lcd_write_data(0x51u);
+  lcd_write_data(0x2Cu);
+  lcd_write_data(0x82u);
+  lcd_write_command(0x11u);
+  delay_ms(120);
+  lcd_write_command(0x29u);
+}
+
+static void lcd_initialize_nt35310(void) {
+  lcd_write_command(0xC0u);
+  lcd_write_data(0x0Cu);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xC1u, 0x44u);
+  lcd_write_command(0xC5u);
+  lcd_write_data(0x00u);
+  lcd_write_data(0x16u);
+  lcd_write_data(0x80u);
+  lcd_command_data(0x36u, 0x60u);
+  lcd_command_data(0x3Au, 0x55u);
+  lcd_command_data(0xB0u, 0x00u);
+  lcd_command_data(0xB1u, 0xB0u);
+  lcd_command_data(0xB4u, 0x02u);
+  lcd_write_command(0xB6u);
+  lcd_write_data(0x02u);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xE9u, 0x00u);
+  lcd_write_command(0xF7u);
+  lcd_write_data(0xA9u);
+  lcd_write_data(0x51u);
+  lcd_write_data(0x2Cu);
+  lcd_write_data(0x82u);
+  lcd_write_command(0x11u);
+  delay_ms(120);
+  lcd_write_command(0x29u);
+}
+
+static void lcd_initialize_st7796s(void) {
+  lcd_write_command(0xC0u);
+  lcd_write_data(0x0Cu);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xC1u, 0x44u);
+  lcd_write_command(0xC5u);
+  lcd_write_data(0x00u);
+  lcd_write_data(0x16u);
+  lcd_write_data(0x80u);
+  lcd_command_data(0x36u, 0x28u);
+  lcd_command_data(0x3Au, 0x55u);
+  lcd_command_data(0xB0u, 0x00u);
+  lcd_command_data(0xB1u, 0xB0u);
+  lcd_command_data(0xB4u, 0x02u);
+  lcd_write_command(0xB6u);
+  lcd_write_data(0x02u);
+  lcd_write_data(0x02u);
+  lcd_command_data(0xE9u, 0x00u);
+  lcd_write_command(0xF7u);
+  lcd_write_data(0xA9u);
+  lcd_write_data(0x51u);
+  lcd_write_data(0x2Cu);
+  lcd_write_data(0x82u);
+  lcd_write_command(0x11u);
+  delay_ms(120);
+  lcd_write_command(0x29u);
+}
+
+static bool lcd_initialize_detected_controller(void) {
+  const lcd_controller_t controller = lcd_detect_controller();
+
+  switch (controller) {
+    case LCD_CONTROLLER_ILI9488:
+      lcd_initialize_ili9488();
+      return true;
+    case LCD_CONTROLLER_NT35310:
+      lcd_initialize_nt35310();
+      return true;
+    case LCD_CONTROLLER_ST7796S:
+      lcd_initialize_st7796s();
+      return true;
+    case LCD_CONTROLLER_UNKNOWN:
+    default:
+      return false;
+  }
+}
+
 static void initialize_lcd_controller(void) {
   gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, true);
   initialize_lcd_parallel_external_memory_bus();
@@ -321,21 +551,9 @@ static void initialize_lcd_controller(void) {
 
   lcd_write_command(0x01u);  // Software reset
   delay_ms(120);
-  lcd_write_command(0x11u);  // Sleep out
-  delay_ms(120);
-
-  lcd_command_data(0xF0u, 0xC3u);  // ILI9488 command-set unlock, harmless on many clones
-  lcd_command_data(0xF0u, 0x96u);
-  lcd_command_data(0xB4u, 0x01u);  // Display inversion control
-  lcd_command_data(0x3Au, 0x55u);  // 16-bit RGB565 pixels
-  lcd_command_data(0x36u, 0x28u);  // Landscape, BGR order
-  lcd_command_data(0xB0u, 0x00u);  // Common to ILI9488/ST7796S command sets
-  lcd_write_command(0xB6u);        // Display function control
-  lcd_write_data(0x02u);
-  lcd_write_data(0x02u);
-  lcd_write_data(0x3Bu);
-  lcd_write_command(0x21u);        // Inversion on: makes a working bus visibly non-white
-  lcd_write_command(0x29u);        // Display on
+  if (!lcd_initialize_detected_controller()) {
+    knob_led_show_error_forever();
+  }
   delay_ms(20);
 
   lcd_draw_boot_screen();

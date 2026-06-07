@@ -55,15 +55,19 @@ The first display bring-up code follows BIGTREETECH's
 `BIGTREE_TFT35_E3_V3_0`/`pin_TFT35_E3_V3_0.h` definitions, which inherit the
 TFT35 V3.0 pin map:
 
-- LCD: 16-bit FSMC 8080 bus, command at `0x60000000`, data at `0x60020000`
+- LCD: 16-bit FSMC 8080 bus, command at `0x60FFFFFE`, data at `0x61000000`
 - Backlight: `PD12`
+- Knob RGB LED data: `PC7`
 - Buzzer/sounder: `PD13`
 - Rotary encoder: `PA8` / `PC9`
 - Encoder push button: `PC8`
 - Encoder enable: `PC6`
 
-The firmware currently initializes the GPIO/FSMC bus, sends a simple
-ILI9488/ST7796S-compatible LCD wake-up sequence, fills the panel with a test
-color, polls the encoder and button, and chirps the sounder once per debounced
-button press. Touch, SD/USB media, serial, bootloader-offset builds, and full LCD
-driver detection are still intentionally out of scope.
+The firmware currently initializes the GPIO/FSMC bus, probes the TFT controller
+using the same ILI9488/NT35310/ST7796S ID checks used by the upstream
+BIGTREETECH TFT35 V3.0 firmware, runs the matching LCD initialization sequence,
+fills the panel with a test screen, polls the encoder and button, and chirps the
+sounder once per debounced button press. If no known LCD controller ID can be
+read, initialization stops, the knob RGB LED flashes red, and the buzzer emits a
+repeating error pulse. Touch, SD/USB media, serial, and bootloader-offset builds
+are still intentionally out of scope.
