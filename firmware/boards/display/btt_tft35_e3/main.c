@@ -7,6 +7,7 @@
 #define MMIO16(addr) (*(volatile uint16_t *)(addr))
 
 #define PERIPH_BASE 0x40000000u
+#define APB1PERIPH_BASE PERIPH_BASE
 #define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000u)
 #define AHB1PERIPH_BASE (PERIPH_BASE + 0x00020000u)
 #define SYSTICK_BASE 0xE000E010u
@@ -14,10 +15,12 @@
 #define AFIO_BASE (APB2PERIPH_BASE + 0x0000u)
 #define RCU_BASE (AHB1PERIPH_BASE + 0x1000u)
 #define GPIO_BASE (APB2PERIPH_BASE + 0x0800u)
+#define TIMER_BASE APB1PERIPH_BASE
 
 #define AFIO_PCF0 MMIO32(AFIO_BASE + 0x04u)
 #define RCU_AHB1EN MMIO32(RCU_BASE + 0x14u)
 #define RCU_APB2EN MMIO32(RCU_BASE + 0x18u)
+#define RCU_APB1EN MMIO32(RCU_BASE + 0x1Cu)
 
 #define GPIOA_BASE (GPIO_BASE + 0x0000u)
 #define GPIOC_BASE (GPIO_BASE + 0x0800u)
@@ -31,6 +34,13 @@
 #define GPIO_BOP(base) MMIO32((base) + 0x10u)
 #define GPIO_BC(base) MMIO32((base) + 0x14u)
 
+#define TIMER5_BASE (TIMER_BASE + 0x1000u)
+#define TIMER_CTL0(base) MMIO32((base) + 0x00u)
+#define TIMER_INTF(base) MMIO32((base) + 0x10u)
+#define TIMER_CNT(base) MMIO32((base) + 0x24u)
+#define TIMER_PSC(base) MMIO32((base) + 0x28u)
+#define TIMER_CAR(base) MMIO32((base) + 0x2Cu)
+
 // External Memory Controller. On GD32F205 it is the peripheral
 // that drives the TFT LCD as a 16-bit 8080-style parallel memory device.
 #define EXMC_BASE 0xA0000000u
@@ -40,10 +50,6 @@
 #define SYST_CSR MMIO32(SYSTICK_BASE + 0x00u)
 #define SYST_RVR MMIO32(SYSTICK_BASE + 0x04u)
 #define SYST_CVR MMIO32(SYSTICK_BASE + 0x08u)
-
-#define DEMCR MMIO32(0xE000EDFCu)
-#define DWT_CTRL MMIO32(0xE0001000u)
-#define DWT_CYCCNT MMIO32(0xE0001004u)
 
 // The LCD controller is memory-mapped through EXMC bank 0. These addresses
 // match BTT's GD32F20x HAL mapping for PE2/FSMC_A23 as the LCD RS line.
@@ -63,6 +69,7 @@ enum {
   TOUCH_MISO_PIN = 4,   // Upstream BTT TFT35 V3.0: XPT2046_MISO PE4
   TOUCH_MOSI_PIN = 3,   // Upstream BTT TFT35 V3.0: XPT2046_MOSI PE3
   TOUCH_PEN_PIN = 13,   // Upstream BTT TFT35 V3.0: XPT2046_TPEN PC13
+  KNOB_LED_PIXELS = 2,  // Upstream GD TFT35 E3 V3.0: NEOPIXEL_PIXELS 2
 };
 
 typedef enum {
@@ -80,6 +87,13 @@ static uint8_t button_history = 0xFFu;
 static bool button_reported_pressed;
 static bool touch_reported_pressed;
 static uint8_t color_bar_rotation;
+static uint32_t last_activity_ms;
+static uint32_t next_knob_led_update_ms;
+static bool backlight_enabled;
+static bool knob_led_enabled;
+static uint8_t knob_led_rainbow_phase;
+
+static void knob_led_set_enabled(bool enabled);
 
 void SysTick_Handler(void) {
   tick_ms++;
@@ -98,17 +112,6 @@ static void delay_cycles(volatile uint32_t cycles) {
 
 static void delay_us_approx(uint32_t us) {
   delay_cycles(us * 3u);
-}
-
-static void cycle_counter_init(void) {
-  DEMCR |= BIT(24);
-  DWT_CYCCNT = 0;
-  DWT_CTRL |= BIT(0);
-}
-
-static void wait_until_cycle(uint32_t cycle) {
-  while ((int32_t)(cycle - DWT_CYCCNT) > 0) {
-  }
 }
 
 static void interrupts_disable(void) {
@@ -135,6 +138,28 @@ static void gpio_output_set(uint32_t base, uint8_t pin, bool high) {
 
 static bool gpio_input_is_high(uint32_t base, uint8_t pin) {
   return (GPIO_ISTAT(base) & BIT(pin)) != 0;
+}
+
+static void backlight_set(bool enabled) {
+  gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, enabled);
+  backlight_enabled = enabled;
+}
+
+static void record_activity(void) {
+  last_activity_ms = tick_ms;
+  if (!backlight_enabled) {
+    backlight_set(true);
+  }
+  if (!knob_led_enabled) {
+    knob_led_set_enabled(true);
+  }
+}
+
+static void backlight_check_idle_timeout(void) {
+  if (backlight_enabled && (uint32_t)(tick_ms - last_activity_ms) >= 30000u) {
+    backlight_set(false);
+    knob_led_set_enabled(false);
+  }
 }
 
 static void touch_cs_set(bool high) {
@@ -194,18 +219,24 @@ static bool touch_read_valid_sample(void) {
 }
 
 static void knob_led_raw_set(bool high) {
-  gpio_output_set(GPIOC_BASE, KNOB_LED_PIN, high);
+  if (high) {
+    GPIO_BOP(GPIOC_BASE) = BIT(KNOB_LED_PIN);
+  } else {
+    GPIO_BC(GPIOC_BASE) = BIT(KNOB_LED_PIN);
+  }
 }
 
 static void knob_led_write_bit(bool high_bit) {
-  const uint32_t start = DWT_CYCCNT;
-  const uint32_t high_cycles = high_bit ? 17u : 3u;
-  const uint32_t total_cycles = 20u;
+  const uint32_t high_ticks = high_bit ? 6u : 3u;
 
+  TIMER_CNT(TIMER5_BASE) = 0;
+  TIMER_INTF(TIMER5_BASE) = 0;
   knob_led_raw_set(true);
-  wait_until_cycle(start + high_cycles);
+  while (TIMER_CNT(TIMER5_BASE) < high_ticks) {
+  }
   knob_led_raw_set(false);
-  wait_until_cycle(start + total_cycles);
+  while ((TIMER_INTF(TIMER5_BASE) & BIT(0)) == 0) {
+  }
 }
 
 static void knob_led_write_byte(uint8_t value) {
@@ -214,15 +245,83 @@ static void knob_led_write_byte(uint8_t value) {
   }
 }
 
-static void knob_led_set_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+static void knob_led_write_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+  knob_led_write_byte(green);
+  knob_led_write_byte(red);
+  knob_led_write_byte(blue);
+}
+
+static uint8_t scale_color(uint8_t value) {
+  return (uint8_t)(value >> 3);
+}
+
+static void rainbow_color(uint8_t phase, uint8_t *red, uint8_t *green, uint8_t *blue) {
+  if (phase < 85u) {
+    *red = scale_color((uint8_t)(255u - phase * 3u));
+    *green = scale_color((uint8_t)(phase * 3u));
+    *blue = 0;
+  } else if (phase < 170u) {
+    phase = (uint8_t)(phase - 85u);
+    *red = 0;
+    *green = scale_color((uint8_t)(255u - phase * 3u));
+    *blue = scale_color((uint8_t)(phase * 3u));
+  } else {
+    phase = (uint8_t)(phase - 170u);
+    *red = scale_color((uint8_t)(phase * 3u));
+    *green = 0;
+    *blue = scale_color((uint8_t)(255u - phase * 3u));
+  }
+}
+
+static void knob_led_show_solid(uint8_t red, uint8_t green, uint8_t blue) {
   interrupts_disable();
-  for (uint8_t pixel = 0; pixel < 4; pixel++) {
-    knob_led_write_byte(green);
-    knob_led_write_byte(red);
-    knob_led_write_byte(blue);
+  for (uint8_t pixel = 0; pixel < KNOB_LED_PIXELS; pixel++) {
+    knob_led_write_rgb(red, green, blue);
   }
   interrupts_enable();
   delay_us_approx(300);
+}
+
+static void knob_led_show_rainbow(void) {
+  interrupts_disable();
+  for (uint8_t pixel = 0; pixel < KNOB_LED_PIXELS; pixel++) {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    rainbow_color((uint8_t)(knob_led_rainbow_phase + pixel * 64u), &red, &green, &blue);
+    knob_led_write_rgb(red, green, blue);
+  }
+  interrupts_enable();
+  delay_us_approx(300);
+}
+
+static void knob_led_update_rainbow(void) {
+  if (!knob_led_enabled || (int32_t)(next_knob_led_update_ms - tick_ms) > 0) {
+    return;
+  }
+
+  knob_led_rainbow_phase = (uint8_t)(knob_led_rainbow_phase + 3u);
+  knob_led_show_rainbow();
+  next_knob_led_update_ms = tick_ms + 80u;
+}
+
+static void knob_led_set_enabled(bool enabled) {
+  if (enabled) {
+    knob_led_show_rainbow();
+    next_knob_led_update_ms = tick_ms + 80u;
+  } else {
+    knob_led_show_solid(0, 0, 0);
+  }
+  knob_led_enabled = enabled;
+}
+
+static void knob_led_timer_init(void) {
+  TIMER_CTL0(TIMER5_BASE) = 0;
+  TIMER_PSC(TIMER5_BASE) = 0;
+  TIMER_CAR(TIMER5_BASE) = 9u;
+  TIMER_CNT(TIMER5_BASE) = 0;
+  TIMER_INTF(TIMER5_BASE) = 0;
+  TIMER_CTL0(TIMER5_BASE) = BIT(0);
 }
 
 static void error_buzzer_pulse(void) {
@@ -238,10 +337,10 @@ static void error_buzzer_pulse(void) {
 
 static void knob_led_show_error_forever(void) {
   while (1) {
-    knob_led_set_rgb(80, 0, 0);
+    knob_led_show_solid(80, 0, 0);
     error_buzzer_pulse();
     delay_ms(180);
-    knob_led_set_rgb(0, 0, 0);
+    knob_led_show_solid(0, 0, 0);
     delay_ms(180);
   }
 }
@@ -253,26 +352,31 @@ static void initialize_clocks_for_display_board(void) {
 
   // Enable EXMC so the LCD can be written through the memory-mapped bus.
   RCU_AHB1EN |= BIT(8);
+  RCU_APB1EN |= BIT(4);  // TIMER5 for NeoPixel bit timing
   (void)RCU_APB2EN;
   (void)RCU_AHB1EN;
+  (void)RCU_APB1EN;
 
   SYST_RVR = 8000u - 1u;  // Reset clock is GD32 IRC8M.
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
-  cycle_counter_init();
+  knob_led_timer_init();
 }
 
 static void initialize_display_board_gpio(void) {
   // 0x3 is the GD32F20x GPIO mode for 50 MHz general-purpose push-pull output.
   configure_gpio_pin_mode(GPIOD_BASE, LCD_BACKLIGHT_PIN, 0x3);
   configure_gpio_pin_mode(GPIOD_BASE, BUZZER_PIN, 0x3);
-  gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, false);
+  backlight_set(true);
+  last_activity_ms = tick_ms;
   gpio_output_set(GPIOD_BASE, BUZZER_PIN, false);
 
   configure_gpio_pin_mode(GPIOC_BASE, ENCODER_EN_PIN, 0x3);
   gpio_output_set(GPIOC_BASE, ENCODER_EN_PIN, true);
   configure_gpio_pin_mode(GPIOC_BASE, KNOB_LED_PIN, 0x3);
-  knob_led_set_rgb(0, 0, 0);
+  knob_led_raw_set(false);
+  delay_ms(1);
+  knob_led_set_enabled(true);
 
   configure_gpio_pin_mode(GPIOE_BASE, TOUCH_CS_PIN, 0x3);
   configure_gpio_pin_mode(GPIOE_BASE, TOUCH_SCK_PIN, 0x3);
@@ -642,7 +746,7 @@ static bool lcd_initialize_detected_controller(void) {
 }
 
 static void initialize_lcd_controller(void) {
-  gpio_output_set(GPIOD_BASE, LCD_BACKLIGHT_PIN, true);
+  backlight_set(true);
   initialize_lcd_parallel_external_memory_bus();
   delay_ms(20);
 
@@ -691,6 +795,9 @@ static int8_t encoder_poll(void) {
   const int8_t delta = transitions[index];
   encoder_position += delta;
   encoder_state = sample;
+  if (delta != 0) {
+    record_activity();
+  }
 
   button_history = (uint8_t)((button_history << 1) |
                              (gpio_input_is_high(GPIOC_BASE, ENCODER_BTN_PIN) ? 1u : 0u));
@@ -698,6 +805,7 @@ static int8_t encoder_poll(void) {
   if (button_history == 0x00u && !button_reported_pressed) {
     button_reported_pressed = true;
     encoder_pressed = true;
+    record_activity();
     chirp(2800, 35);
   } else if (button_history == 0xFFu) {
     button_reported_pressed = false;
@@ -711,6 +819,7 @@ static void touch_poll(void) {
   if (touch_is_pressed()) {
     if (!touch_reported_pressed && touch_read_valid_sample()) {
       touch_reported_pressed = true;
+      record_activity();
       lcd_draw_touch_button(true);
       chirp(2200, 45);
     }
@@ -739,6 +848,8 @@ int main(void) {
       lcd_draw_color_bars();
     }
     touch_poll();
+    backlight_check_idle_timeout();
+    knob_led_update_rainbow();
     delay_ms(1);
   }
 }
