@@ -28,15 +28,18 @@ timing boundaries:
   core starts the scheduler.
 - Provide monotonic clocks to runtime code when a role uses the scheduler.
 - Keep interrupt service routines short. Interrupts may record data, set flags,
-  acknowledge hardware, or feed a hardware queue, then return.
+  acknowledge hardware, feed a hardware queue, or run one bounded preemptive
+  scheduler pass for urgent priorities, then return.
 - Keep scheduled service methods non-blocking. They should do bounded work and
   return to the scheduler or main loop.
 - Do not put parser, planner, machine state, or role-independent runtime policy
   in a board HAL.
 - Do not busy-wait for USB, serial, Controller Area Network (CAN), storage,
   display transfer, input, or another scheduled task from a scheduler callback.
-- Hardware timer code may own precise waveform timing. Scheduler callbacks
-  should own setup, refill, debounce, and follow-up work.
+- Hardware timer code may own precise waveform timing. Preemptive-priority
+  scheduler callbacks should own urgent setup, refill, debounce, and follow-up
+  work that is safe to run from timer or interrupt context. Normal-priority
+  callbacks should own less urgent service work from the main loop.
 
 ## Mainboard HAL
 
@@ -58,6 +61,9 @@ Purpose:
 - Configure GPIO modes, alternate functions, pull-ups, and safe output states.
 - Initialize hardware timers for step generation, spindle control, watchdog,
   monotonic time, and other board-local timing.
+- Configure the timer or interrupt hook that calls
+  `runtime_scheduler_run_preemptive_ready_tasks_once()` when the mainboard task
+  table enables preemptive dispatch for motion or safety service work.
 - Initialize communication hardware such as USB, serial, or CAN when present.
 - Initialize limit, probe, emergency stop, spindle, coolant, fan, and local IO
   pins into safe defaults.
@@ -84,7 +90,7 @@ Timing:
 - Called repeatedly from the mainboard main loop.
 - Must return quickly.
 - Must not generate step pulses directly; precise step timing belongs in timer
-  code fed by planner or step queues.
+  compare code fed by planner or step queues.
 
 ## Display HAL
 
@@ -131,7 +137,8 @@ Purpose:
 Timing:
 
 - Called by scheduler initialization and every scheduler pass.
-- Must be safe to call from main-loop context.
+- Must be safe to call from main-loop context and from a board timer or
+  interrupt when that role enables preemptive scheduler dispatch.
 - Must tolerate unsigned wrap. Runtime code compares timestamps with wrap-safe
   signed subtraction.
 

@@ -43,7 +43,7 @@ void runtime_chirp_initialize(runtime_chirp_t *chirp, runtime_chirp_driver_t dri
 // replaced the next time runtime_chirp_service() runs.
 void runtime_chirp_request(runtime_chirp_t *chirp, uint32_t frequency_hz, uint32_t duration_milliseconds);
 
-// Runs one bounded low-priority service step. Call this from a cooperative
+// Runs one bounded low-priority service step. Call this from a normal-priority
 // scheduler task, not from interrupt context.
 void runtime_chirp_service(runtime_chirp_t *chirp);
 

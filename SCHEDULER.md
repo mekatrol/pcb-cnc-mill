@@ -1,16 +1,24 @@
 # Scheduler
 
-This firmware uses a cooperative runtime scheduler for normal firmware work.
-Hardware timers and interrupts still own precise or urgent timing. Scheduler
-tasks should perform bounded service steps, update state, and return to the
-main loop.
+This firmware uses a priority-based runtime scheduler. High-priority tasks can
+run preemptively from a board timer or interrupt hook, while lower-priority work
+continues to run from the main loop. Hardware timers still own exact step pulse
+edges and other waveform timing. Scheduler tasks should perform bounded service
+steps, update state, and return.
 
 ## Adding Scheduler Tasks
 
-The runtime scheduler is cooperative, not preemptive. A task runs only when the
-main loop calls `runtime_scheduler_run_ready_tasks_once()`, and once a callback
-starts it keeps the CPU until it returns. Scheduler priority controls dispatch
-order for ready tasks; it does not interrupt a running task.
+The runtime scheduler uses fixed numeric priorities. Lower numbers are more
+urgent. A board may set `.preemptive_dispatch_enabled = true` and choose a
+`.preemptive_priority_ceiling`; tasks at or below that ceiling are run by
+`runtime_scheduler_run_preemptive_ready_tasks_once()` from a timer or interrupt
+context. Those tasks can interrupt lower-priority scheduler callbacks, but they
+cannot re-enter themselves and cannot interrupt equal or higher-priority work.
+
+Normal tasks run when the main loop calls
+`runtime_scheduler_run_ready_tasks_once()`. When preemptive dispatch is enabled,
+the main-loop dispatcher skips preemptive-priority tasks and leaves them for the
+board timer or interrupt hook.
 
 Use the scheduler for normal firmware service work:
 
@@ -22,10 +30,13 @@ Use the scheduler for normal firmware service work:
 - advancing low-priority feedback such as chirps and LEDs
 - low-rate status, diagnostics, and housekeeping
 
-Do not use scheduler callbacks for precise step pulse timing, hard emergency
-stop edges, tight serial bit timing, or long blocking transfers. Put precise or
-urgent hardware timing in timer or interrupt code, then hand only small events
-or state flags back to scheduled work.
+Use preemptive-priority scheduler tasks for urgent bounded service work such as
+planner queue refill, step generator starvation checks, feed hold or resume
+follow-up, and fast safety state propagation. Do not use scheduler callbacks
+for precise step pulse timing, hard emergency stop edges, tight serial bit
+timing, or long blocking transfers. Put exact hardware timing in timer or
+interrupt code, then hand only small events or state flags back to scheduled
+work.
 
 To add a periodic task:
 
@@ -67,17 +78,33 @@ Task fields:
   for a task that is cheap, bounded, and should be checked every scheduler pass
   while the main loop is awake.
 - `.priority` is fixed dispatch order. Lower numbers run before higher numbers
-  when several tasks are ready.
+  when several tasks are ready. If the scheduler's preemptive dispatch is
+  enabled, priorities at or below `.preemptive_priority_ceiling` run from the
+  board timer or interrupt hook.
 - `.enabled` can keep a task in the table while disabling it for a board variant
   or unfinished feature.
 - `.next_run_milliseconds` is owned by the scheduler after initialization.
+- `.running` is owned by the scheduler after initialization. Initialize it to
+  `false` in static task records or leave it zero-initialized.
 - `.callback` must not block, sleep, busy-wait for a device, or call another
   task directly.
 
+Scheduler instance fields:
+
+- `.preemptive_dispatch_enabled` enables interrupt-level dispatch for urgent
+  tasks.
+- `.preemptive_priority_ceiling` defines the highest numeric priority that may
+  run preemptively. For example, `29u` moves priorities `0-29` into the
+  preemptive path.
+- `.active_callback` and `.active_priority` are owned by the scheduler after
+  initialization.
+
 Suggested priority bands:
 
-- `0-9`: emergency and fault follow-up, alarm state, watchdog fault handling.
-- `10-29`: motion service and time-sensitive input polling or debounce.
+- `0-9`: preemptive emergency and fault follow-up, alarm state, watchdog fault
+  handling.
+- `10-29`: preemptive motion service, planner refill, step generator starvation
+  checks, and time-sensitive input polling or debounce.
 - `30-79`: communication receive/transmit service for USB, serial, CAN, or host
   links.
 - `80-159`: display refresh, LEDs, buzzer feedback, and normal status
@@ -90,20 +117,21 @@ These bands are guidance, not separate queues. Current small targets may use
 closer values while only a few tasks exist; preserve the relative rule that
 lower numbers run first and urgent work gets the lower number.
 
-Interrupt priority and scheduler priority are separate concerns. Interrupts can
-preempt scheduled tasks, so interrupt service routines must be short: acknowledge
-the hardware, copy a byte or timestamp, set a flag, and return. Do not move
-normal task work into a high-priority interrupt just to make it run sooner. If
-work can tolerate scheduler latency, keep it scheduled. If it cannot tolerate
-scheduler latency, it should be a hardware timer or interrupt path with a small
-scheduled follow-up.
+Interrupt priority and scheduler priority are related but separate concerns.
+Hardware interrupt priority decides which interrupt can preempt another
+interrupt. Scheduler priority decides which ready callback may run, and whether
+that callback belongs to the preemptive scheduler path. Interrupt service
+routines must stay short: acknowledge the hardware, copy a byte or timestamp,
+set a flag, optionally run a bounded preemptive scheduler pass, and return.
 
 ## Current Limitations
 
 - Tasks are static caller-owned table entries; there is no dynamic task
   allocation.
 - A callback has no payload argument. Put feature state in the owning module.
-- A running callback is not preempted by another scheduler task.
+- Only board-enabled preemptive-priority callbacks can interrupt lower-priority
+  scheduler callbacks. There is no full thread stack switching or blocking wait
+  primitive.
 - Ready tasks are scanned by numeric priority on each scheduler pass.
 - Each ready task can run once per pass after its `next_run_milliseconds`
   arrives.

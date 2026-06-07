@@ -16,8 +16,8 @@ Main job:
 ## Approach
 
 Use a layered design with a shared bare-metal runtime. All board types use the
-same runtime shape: hardware interrupts for urgent work, hardware timers for
-accurate timing, and a cooperative scheduler for normal firmware work.
+same runtime shape: hardware interrupts for urgent hardware events, hardware
+timers for accurate timing, and a priority scheduler for firmware service work.
 
 1. Host link
    - Handles serial or USB transport.
@@ -48,8 +48,10 @@ accurate timing, and a cooperative scheduler for normal firmware work.
    - Wraps GPIO, timers, PWM, ADC, EEPROM/flash, and interrupts.
    - Keeps board-specific code away from planner and parser code.
 
-7. Cooperative scheduler
-   - Runs small non-blocking tasks from the main loop.
+7. Priority scheduler
+   - Runs small non-blocking tasks by fixed priority.
+   - Allows configured high-priority tasks to run preemptively from a board
+     timer or interrupt hook.
    - Owns task timing for command processing, screen refresh, button scanning,
      status reports, storage polling, and communication housekeeping.
    - Does not own step pulse timing.
@@ -58,8 +60,8 @@ accurate timing, and a cooperative scheduler for normal firmware work.
 
 ## Board Runtime Model
 
-Use bare metal plus interrupts plus a cooperative scheduler. Do not make an
-RTOS part of the base design.
+Use bare metal plus interrupts plus a priority scheduler. Do not make an RTOS
+part of the base design.
 
 Common runtime code should be written once and reused by mainboards, displays,
 and toolheads. Board-specific code only selects pins, timers, buses, clocks,
@@ -78,7 +80,8 @@ interrupt priorities, and enabled features.
 The shared runtime should provide:
 
 - Startup hooks for board clock, memory, and peripheral setup.
-- A cooperative task table with task name, period, priority order, and callback.
+- A priority task table with task name, period, priority order, enabled flag,
+  callback, and scheduler-owned running state.
 - Priority work queues for one-shot commands such as chirp, draw text, parse a
   received command, enqueue a planned move, or send a status frame.
 - Monotonic tick time for non-critical task scheduling.
@@ -142,7 +145,8 @@ Queue rules:
 - No queued item may wait on USB, SD card, CAN, display transfer, button input,
   or another queued item.
 - The scheduler should limit how much work it runs per pass so low priority work
-  cannot make the main loop unresponsive.
+  cannot make the main loop unresponsive, and board timer hooks should run only
+  bounded preemptive-priority work.
 - Starvation protection should allow occasional lower-priority work to run when
   high-priority work remains busy, except when the machine is in an emergency or
   motion-critical state.
@@ -161,7 +165,8 @@ Safety first for all control code.
 
 ## Timing Model
 
-High-level code runs through the cooperative scheduler. Step pulse generation
+High-level code runs through the priority scheduler. Motion-critical service
+work can use preemptive-priority scheduler tasks, but step pulse generation
 must use precise hardware timing and must not depend on scheduler latency.
 
 - Interrupt or timer code stays small.

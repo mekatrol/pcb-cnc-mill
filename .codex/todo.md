@@ -18,10 +18,10 @@
 - Define common startup flow: reset handler, clock setup, board HAL init,
   driver init, scheduler init, application init, then scheduler loop.
 - Add monotonic system tick for scheduler timing.
-- Add cooperative task table with task name, period, priority order, enabled
-  flag, and callback.
-- Add scheduler loop that runs ready tasks and requires each task to return
-  quickly.
+- Add priority task table with task name, period, priority order, enabled flag,
+  scheduler-owned running state, and callback.
+- Add scheduler loop for normal-priority ready tasks and board timer hooks for
+  preemptive-priority ready tasks. Require every task to return quickly.
 - Add task watchdog policy so the watchdog is fed only when critical tasks are
   healthy.
 - Add lightweight event flags for interrupt-to-task notifications.
@@ -31,8 +31,8 @@
   command handlers, UI code, and interrupt follow-up code.
 - Add reserved queue capacity for emergency and motion work so display,
   feedback, storage, or logging work cannot fill every slot.
-- Add scheduler dispatch budget so each loop runs a bounded amount of queued
-  work before returning to polling time-critical services.
+- Add scheduler dispatch budget so each loop or preemptive timer pass runs a
+  bounded amount of queued work before returning to hardware service.
 - Add queue full behavior with explicit results: accepted, delayed, coalesced,
   rejected, or dropped as stale.
 - Add starvation protection for normal operation while preserving emergency and
@@ -44,7 +44,7 @@
   events, and planner segments.
 - Add short critical-section helpers for shared state touched by interrupts.
 - Add host-build scheduler tests for task ordering, periodic timing, disabled
-  tasks, and overrun detection.
+  tasks, priority preemption, self-reentry prevention, and overrun detection.
 - Add host-build priority queue tests for priority order, delayed dispatch,
   queue full handling, coalescing, starvation protection, and stale deadline
   drops.
@@ -66,7 +66,8 @@
 - Add timer-based step pulse generator.
 - Add motion planner queue.
 - Add planner-to-step-generator ring buffer using the shared runtime helpers.
-- Add scheduler task that refills the planner queue before it can starve.
+- Add preemptive-priority scheduler task that refills the planner queue before
+  it can starve.
 - Add motion command work item that queues validated moves into the planner
   without generating step pulses directly.
 - Add step generator starvation alarm.

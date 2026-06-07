@@ -6,12 +6,14 @@ Firmware for a PCB milling CNC.
 This firmware is for hobby PCB mill control. It takes ideas from Klipper,
 Marlin, and GRBL: host command handling, G-code parsing, planned motion,
 precise step generation, spindle control, and clear machine safety states.
-The base execution model is bare metal plus interrupts plus a cooperative
-scheduler. Hardware timers own precise step timing; the scheduler runs bounded
-non-blocking work for communication, storage, display, input, and housekeeping.
-One-shot work such as chirps, display commands, user input events, communication
-messages, and motion command enqueueing runs through bounded priority queues.
-Stepper pulse timing still stays in hardware timer code.
+The base execution model is bare metal plus interrupts plus a priority-based
+scheduler. Hardware timers own precise step timing; preemptive-priority
+scheduler tasks handle urgent bounded service work such as planner refill and
+step generator starvation checks, and normal scheduler tasks handle
+communication, storage, display, input, and housekeeping. One-shot work such as
+chirps, display commands, user input events, communication messages, and motion
+command enqueueing runs through bounded priority queues. Stepper pulse timing
+still stays in hardware timer code.
 
 ## Firmware Layout
 
@@ -24,7 +26,7 @@ details.
   state, safety state, motion planning, shared runtime, and step scheduling
   belong here.
 - `firmware/core/runtime/` - shared bare-metal runtime code used by mainboard,
-  display, and toolhead builds. Cooperative scheduler dispatch and reusable
+  display, and toolhead builds. Priority scheduler dispatch and reusable
   low-priority chirp feedback state machines live here, not in board-role entry
   points.
 - `firmware/core/mainboard/main.c` - shared main controller firmware entry
@@ -66,9 +68,9 @@ family implementations. Driver folders hold standard protocol and device code
 once. Machine config ties selected hardware to one CNC build.
 
 Mainboard, display, and toolhead firmware should share the same runtime model:
-common startup flow, cooperative task table, interrupt-to-task events, bounded
-queues, and short critical sections. Board support selects the hardware details
-and enabled features.
+common startup flow, priority task table, optional preemptive dispatch for
+urgent priorities, interrupt-to-task events, bounded queues, and short critical
+sections. Board support selects the hardware details and enabled features.
 
 Board-role hardware abstraction layer (HAL) methods are documented in
 [`API.md`](API.md).
