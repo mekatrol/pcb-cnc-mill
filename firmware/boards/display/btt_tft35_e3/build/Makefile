@@ -32,7 +32,7 @@ CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata
 ASFLAGS  := $(CPUFLAGS)
 
 SRCS := \
-	$(BOARD_DIR)$(SEP)main.c \
+	$(BOARD_DIR)$(SEP)display_hal.c \
 	$(BOARD_DIR)$(SEP)startup.s
 
 OBJS := $(patsubst $(BOARD_DIR)$(SEP)%,$(OBJ_DIR)$(SEP)%,$(SRCS:.c=.o))

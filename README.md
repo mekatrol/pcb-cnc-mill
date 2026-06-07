@@ -46,7 +46,9 @@ details.
 - `firmware/drivers/tmc2209/` - shared TMC2209 stepper driver support.
 - `firmware/boards/` - board-specific support grouped by hardware function
   first, then by vendor and model at the leaf. Pin maps, MCU quirks, timer
-  choices, ports, and board feature flags belong here.
+  choices, ports, and board feature flags belong here. Board support source
+  files should use feature names such as `display_hal.c` or
+  `mainboard_hal.c`; `main.c` is reserved for entry points.
 - `firmware/boards/mainboard/` - main controller board definitions, such as
   `btt_skr_mini_e3_v3/`, `fysetc_spider_king_10/`, and `duet_3_mini_5_plus/`.
 - `firmware/boards/display/` - display and pendant board definitions, such as

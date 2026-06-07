@@ -24,6 +24,9 @@
 - Keep code split by feature or function. Entry point files such as `main.c`
   should wire startup and loops only; scheduler, timer, parser, planner,
   display, input, and driver behavior should live in their own files.
+- Reserve `main.c` filenames for true entry points that define or directly
+  wire the firmware main loop. Board support files should use feature names
+  such as `display_hal.c`, `mainboard_hal.c`, timer, input, or driver names.
 - Use common runtime names for code shared by mainboard, display, and toolhead
   builds. Do not add a board-role prefix such as `display_` to scheduler,
   timer, queue, or task types unless the type is truly display-specific.
