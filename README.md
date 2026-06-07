@@ -16,6 +16,12 @@ details.
 - `firmware/core/` - hardware-neutral parser, command, state, safety, planner,
   and step scheduling code. G-code parsing, command dispatch, machine state,
   safety state, motion planning, and step scheduling belong here.
+- `firmware/core/mainboard/main.c` - shared main controller firmware entry
+  point. It calls the selected mainboard HAL instead of knowing board pins or
+  MCU details.
+- `firmware/core/display/main.c` - shared display firmware entry point. It
+  calls the selected display board HAL instead of owning LCD, touch, or encoder
+  pins directly.
 - `firmware/hal/include/` - standard HAL interfaces used by core and reusable
   drivers.
 - `firmware/hal/stm32/` - STM32 implementations for GPIO, timers, PWM, serial,

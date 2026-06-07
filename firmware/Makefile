@@ -11,13 +11,13 @@ ifeq ($(BUILD_TARGET),mainboard)
   BOARD_NAME  ?= $(MAIN_BOARD_NAME)
   MCU         ?= cortex-m0plus
   CHIP        ?= STM32G0B1
-  ENTRY_CSRCS := core/main.c
+  ENTRY_CSRCS := core/mainboard/main.c
 else ifeq ($(BUILD_TARGET),display)
   BOARD_CLASS ?= display
   BOARD_NAME  ?= $(DISPLAY_BOARD_NAME)
   MCU         ?= cortex-m3
   CHIP        ?= GD32F205
-  ENTRY_CSRCS :=
+  ENTRY_CSRCS := core/display/main.c
 else
   $(error Unknown BUILD_TARGET "$(BUILD_TARGET)"; use mainboard or display)
 endif
@@ -77,7 +77,7 @@ ASFLAGS  := $(CPUFLAGS)
 LD_SCRIPT := $(BOARD_BLD_DIR)$(SEP)linker.ld
 LDFLAGS   := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(LD_SCRIPT)
 
-CFLAGS += -I$(CORE_DIR) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
+CFLAGS += -I$(CORE_DIR) -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
 CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
 
 # =========================

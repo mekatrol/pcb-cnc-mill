@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "display_hal.h"
 #include "registers.h"
 
 enum
@@ -736,6 +737,7 @@ static void lcd_draw_boot_screen(void)
   lcd_draw_color_bars();
   lcd_fill_rect(0, 296, 480, 24, amber);
 
+  lcd_draw_text(54, 26, "MEKATROL", white, bg, 4);
   lcd_draw_text(54, 70, "PCB CNC MILL", white, bg, 4);
   lcd_draw_text(84, 128, "BTT TFT35 E3", cyan, bg, 3);
   lcd_draw_text(72, 174, "DIAL ROTATES TOP RGB", amber, bg, 2);
@@ -963,7 +965,7 @@ static void touch_poll(void)
   }
 }
 
-int main(void)
+void display_initialize_hardware(void)
 {
   initialize_clocks_for_display_board();
   initialize_display_board_gpio();
@@ -972,23 +974,23 @@ int main(void)
   initialize_lcd_controller();
 
   encoder_state = encoder_sample();
+}
 
-  while (1)
+void display_run_background_tasks(void)
+{
+  const int8_t encoder_delta = encoder_poll();
+  if (encoder_delta > 0)
   {
-    const int8_t encoder_delta = encoder_poll();
-    if (encoder_delta > 0)
-    {
-      color_bar_rotation = (uint8_t)((color_bar_rotation + 1u) % 6u);
-      lcd_draw_color_bars();
-    }
-    else if (encoder_delta < 0)
-    {
-      color_bar_rotation = (uint8_t)((color_bar_rotation + 5u) % 6u);
-      lcd_draw_color_bars();
-    }
-    touch_poll();
-    backlight_check_idle_timeout();
-    knob_led_update_rainbow();
-    delay_ms(1);
+    color_bar_rotation = (uint8_t)((color_bar_rotation + 1u) % 6u);
+    lcd_draw_color_bars();
   }
+  else if (encoder_delta < 0)
+  {
+    color_bar_rotation = (uint8_t)((color_bar_rotation + 5u) % 6u);
+    lcd_draw_color_bars();
+  }
+  touch_poll();
+  backlight_check_idle_timeout();
+  knob_led_update_rainbow();
+  delay_ms(1);
 }
