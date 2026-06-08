@@ -125,6 +125,7 @@ LDFLAGS   := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) \
              -T$(LD_SCRIPT)
 
 CFLAGS += -I$(CORE_DIR) -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
+CFLAGS += -I$(BOARD_DIR)/include -I$(BOARD_DIR)/include/core
 CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
 ifneq ($(MAINBOARD_DISPLAY_ENABLED),)
   CFLAGS += -DMAINBOARD_HAS_DISPLAY_MODULE=1 -I$(CORE_DIR)/display -I$(MAINBOARD_DISPLAY_DIR)
