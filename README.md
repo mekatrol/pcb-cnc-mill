@@ -35,6 +35,10 @@ details.
 - `firmware/core/display/main.c` - shared display firmware entry point. It
   calls the selected display board HAL instead of owning LCD, touch, or encoder
   pins directly. It should only wire startup, runtime setup, and the main loop.
+- `firmware/core/display/mainboard_display_module.h` - shared contract for a
+  display panel compiled into a mainboard firmware image. Use this for panels
+  such as a Mini12864 connected to a mainboard expansion header, not for
+  display boards that have their own MCU and firmware image.
 - `firmware/hal/include/` - standard HAL interfaces used by core and reusable
   drivers.
 - `firmware/hal/stm32/` - STM32 implementations for GPIO, timers, PWM, serial,
@@ -55,7 +59,12 @@ details.
 - `firmware/boards/mainboard/` - main controller board definitions, such as
   `btt_skr_mini_e3_v3/`, `fysetc_spider_king_10/`, and `duet_3_mini_5_plus/`.
 - `firmware/boards/display/` - display and pendant board definitions, such as
-  `btt_tft35_e3/`.
+  `btt_tft35_e3/`. These boards have their own MCU, startup code, linker
+  script, scheduler entry point, and firmware binary.
+- `firmware/boards/display_module/` - mainboard-attached display module
+  definitions, such as `btt_mini12864/`. These modules are compiled into the
+  selected mainboard firmware image and do not own clocks, startup code,
+  linker scripts, or separate firmware binaries.
 - `firmware/boards/toolhead/` - remote toolhead and IO board definitions, such
   as `btt_ebb36/` and `btt_ebb42/`.
 - `firmware/configs/machines/` - per-machine config for limits, travel, units,
@@ -71,6 +80,16 @@ Mainboard, display, and toolhead firmware should share the same runtime model:
 common startup flow, priority task table, optional preemptive dispatch for
 urgent priorities, interrupt-to-task events, bounded queues, and short critical
 sections. Board support selects the hardware details and enabled features.
+
+Display support has two hardware models:
+
+- Standalone display firmware: the display board has its own MCU and firmware
+  image, for example the BTT TFT35 E3. Build it with `BUILD_TARGET=display` and
+  `DISPLAY_BOARD_NAME=<board>`.
+- Mainboard-attached display module: the display is a panel wired to a
+  mainboard, for example a BTT Mini12864 on an SKR expansion header. Build it
+  into the mainboard image with `BUILD_TARGET=mainboard` and
+  `MAINBOARD_DISPLAY_NAME=<module>`.
 
 Board-role hardware abstraction layer (HAL) methods are documented in
 [`HAL_API.md`](HAL_API.md).
@@ -113,12 +132,16 @@ make flash BUILD_TARGET=display
 ```
 
 The default boards are `MAIN_BOARD_NAME=btt_skr_mini_e3_v3` and
-`DISPLAY_BOARD_NAME=btt_tft35_e3`. Override them on the command line when
-adding another board:
+`DISPLAY_BOARD_NAME=btt_tft35_e3`. `MAINBOARD_DISPLAY_NAME=none` means the
+mainboard image has no attached display module. Override names on the command
+line when adding another board or display module:
 
 ```sh
 make -C firmware mainboard MAIN_BOARD_NAME=btt_skr_mini_e3_v3
 make -C firmware display DISPLAY_BOARD_NAME=btt_tft35_e3
+make -C firmware mainboard \
+  MAIN_BOARD_NAME=btt_skr_mini_e3_v3 \
+  MAINBOARD_DISPLAY_NAME=btt_mini12864
 ```
 
 Check the selected build settings with:
@@ -126,6 +149,9 @@ Check the selected build settings with:
 ```sh
 make -C firmware print-config
 make -C firmware print-config BUILD_TARGET=display
+make -C firmware print-config \
+  BUILD_TARGET=mainboard \
+  MAINBOARD_DISPLAY_NAME=btt_mini12864
 ```
 
 ## Current Firmware Targets
@@ -134,8 +160,12 @@ make -C firmware print-config BUILD_TARGET=display
   controller with `MAIN_BOARD_NAME` and the display controller with
   `DISPLAY_BOARD_NAME`. Use `make -C firmware mainboard` for the default
   mainboard build, `make -C firmware display` for the default display build, or
-  override names on the command line. Shared runtime sources under
-  `firmware/core/runtime/` are compiled into each board-role build.
+  override names on the command line. Mainboard-attached display panels are
+  selected with `MAINBOARD_DISPLAY_NAME`; when set to a value other than
+  `none`, the output path and binary name include `-with-<module>` so plain and
+  display-equipped mainboard images do not overwrite each other. Shared runtime
+  sources under `firmware/core/runtime/` are compiled into each board-role
+  build.
 - `firmware/boards/display/btt_tft35_e3/` - initial GD32F205 bring-up for the
   BTT TFT35 E3 display. It includes startup code, linker script, GDB script,
   and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
@@ -147,3 +177,8 @@ make -C firmware print-config BUILD_TARGET=display
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD
   flash and debug.
+- `firmware/boards/display_module/btt_mini12864/` - placeholder for a BTT
+  Mini12864-style compact display connected to a mainboard expansion header.
+  It is compiled into a mainboard firmware image with
+  `MAINBOARD_DISPLAY_NAME=btt_mini12864`; hardware pins and LCD controller
+  behavior still need bench verification.

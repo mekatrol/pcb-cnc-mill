@@ -12,6 +12,7 @@ Each board implementation should place its role header and source in:
 - `firmware/boards/mainboard/<board_name>/mainboard_hal.c`
 - `firmware/boards/display/<board_name>/display_hal.h`
 - `firmware/boards/display/<board_name>/display_hal.c`
+- `firmware/boards/display_module/<module_name>/mainboard_display_module.c`
 - `firmware/boards/toolhead/<board_name>/toolhead_hal.h`
 - `firmware/boards/toolhead/<board_name>/toolhead_hal.c`
 
@@ -95,7 +96,10 @@ Timing:
 ## Display HAL
 
 The display HAL is the board support contract for display and pendant boards.
-The current shared display entry point is `firmware/core/display/main.c`.
+The current shared display entry point is `firmware/core/display/main.c`. Use
+this contract only for display hardware that has its own microcontroller and
+therefore owns a separate firmware image, reset handler, linker script, clock
+tree, scheduler instance, and local display firmware main loop.
 
 Required header:
 
@@ -199,6 +203,82 @@ Timing:
 - Called once after each scheduler pass.
 - Should not sleep so long that input, display, communication, or feedback
   tasks miss their expected service latency.
+
+## Mainboard Display Module
+
+A mainboard display module is a panel wired directly to a mainboard. It is
+compiled into the mainboard firmware image with `MAINBOARD_DISPLAY_NAME=<name>`.
+It does not own a reset handler, linker script, system clock, scheduler
+instance, or separate firmware binary.
+
+Shared header:
+
+```c
+#include "mainboard_display_module.h"
+```
+
+Required implementation file:
+
+```text
+firmware/boards/display_module/<module_name>/mainboard_display_module.c
+```
+
+Required methods:
+
+```c
+void mainboard_display_module_initialize_hardware(void);
+void mainboard_display_module_run_background_tasks(void);
+void mainboard_display_module_run_feedback_tasks(void);
+```
+
+### `mainboard_display_module_initialize_hardware`
+
+Purpose:
+
+- Configure only display-module-local hardware such as display bus pins,
+  chip-select pins, encoder inputs, button inputs, backlight, sounder, and
+  LEDs.
+- Leave MCU clocks, reset-time safety output states, motion timers,
+  communication peripherals, and system monotonic timers under mainboard HAL
+  ownership.
+
+Timing:
+
+- Called once after `mainboard_initialize_hardware()` in the shared mainboard
+  entry point when `MAINBOARD_DISPLAY_NAME` is not `none`.
+- May perform reset-time panel setup but must not assume it owns global clock or
+  interrupt policy.
+
+### `mainboard_display_module_run_background_tasks`
+
+Purpose:
+
+- Run bounded input and display service work for a mainboard-attached panel:
+  encoder sampling, button debounce, compact LCD redraw regions, and status
+  presentation.
+- In the current mainboard skeleton this is called from the main loop. When the
+  mainboard entry point moves to the runtime scheduler, this work should become
+  scheduler tasks in the display/input priority bands.
+
+Timing:
+
+- Must return quickly.
+- Must not block machine control, motion service, host communication, or safety
+  follow-up work.
+
+### `mainboard_display_module_run_feedback_tasks`
+
+Purpose:
+
+- Run bounded local feedback work such as sounder chirps, status LEDs, or
+  backlight timeout state.
+- Keep feedback work separate from redraw work so future task tables can give
+  each service a different period or priority.
+
+Timing:
+
+- Must return quickly.
+- Must not busy-wait for the full sound or LED pattern duration.
 
 ## Toolhead HAL
 

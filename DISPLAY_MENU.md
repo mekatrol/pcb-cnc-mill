@@ -16,6 +16,9 @@ operation rather than general-purpose printer or router workflows.
   coordinates, limits, alarms, and settings persistence.
 - The display owns presentation, touch or encoder input, local feedback,
   redraw pacing, and communication with the mainboard.
+- A standalone display board owns its local firmware and link to the mainboard.
+  A mainboard-attached display module shares the mainboard firmware image and
+  talks to machine state through in-firmware interfaces instead of a board link.
 - Emergency stop, hard limit, and alarm indicators must be visible from every
   screen.
 - Any operation that can move an axis, start the spindle, change offsets, clear
@@ -1318,8 +1321,13 @@ controls visible.
 - Shared display code should expose layout-independent screens and actions.
   Board or display-profile code should choose whether a screen is rendered as a
   large touch page, compact 128x64 page, or another future profile.
-- Board display HAL code should own LCD controller setup, physical drawing
-  primitives, touch or encoder sampling, backlight, buzzer, and local LEDs.
+- Standalone display board HAL code should own its display-board clock setup,
+  LCD controller setup, physical drawing primitives, touch or encoder sampling,
+  backlight, buzzer, local LEDs, and communication link to the mainboard.
+- Mainboard-attached display module code should own only panel-local hardware
+  such as compact LCD pins, encoder inputs, click buttons, backlight, sounder,
+  and LEDs. It must not own machine state, motion validation, mainboard clocks,
+  reset handlers, linker scripts, or separate firmware update behavior.
 - Display refresh work should be split into bounded regions so input, buzzer,
   communication, and safety state polling stay responsive.
 - Compact display redraw should be line-based or tile-based so encoder response

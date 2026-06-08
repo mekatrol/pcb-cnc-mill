@@ -30,6 +30,10 @@
 - Use common runtime names for code shared by mainboard, display, and toolhead
   builds. Do not add a board-role prefix such as `display_` to scheduler,
   timer, queue, or task types unless the type is truly display-specific.
+- Keep standalone display firmware boards separate from mainboard-attached
+  display modules. A module such as a Mini12864 compiled into a mainboard image
+  belongs under `firmware/boards/display_module/`, not under
+  `firmware/boards/display/`.
 
 ## Firmware Rules
 

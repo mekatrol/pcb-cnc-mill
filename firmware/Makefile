@@ -4,6 +4,7 @@
 BUILD_TARGET       ?= mainboard
 MAIN_BOARD_NAME    ?= btt_skr_mini_e3_v3
 DISPLAY_BOARD_NAME ?= btt_tft35_e3
+MAINBOARD_DISPLAY_NAME ?= none
 DRIVER_NAMES       ?=
 
 ifeq ($(BUILD_TARGET),mainboard)
@@ -12,6 +13,12 @@ ifeq ($(BUILD_TARGET),mainboard)
   MCU         ?= cortex-m0plus
   CHIP        ?= STM32G0B1
   ENTRY_CSRCS := core/mainboard/main.c
+  ifneq ($(MAINBOARD_DISPLAY_NAME),none)
+    MAINBOARD_DISPLAY_ENABLED := 1
+    ifeq ($(wildcard boards/display_module/$(MAINBOARD_DISPLAY_NAME)),)
+      $(error Unknown MAINBOARD_DISPLAY_NAME "$(MAINBOARD_DISPLAY_NAME)"; expected a folder under boards/display_module or use none)
+    endif
+  endif
 else ifeq ($(BUILD_TARGET),display)
   BOARD_CLASS ?= display
   BOARD_NAME  ?= $(DISPLAY_BOARD_NAME)
@@ -22,7 +29,7 @@ else
   $(error Unknown BUILD_TARGET "$(BUILD_TARGET)"; use mainboard or display)
 endif
 
-export BUILD_TARGET MAIN_BOARD_NAME DISPLAY_BOARD_NAME BOARD_CLASS BOARD_NAME MCU CHIP DRIVER_NAMES
+export BUILD_TARGET MAIN_BOARD_NAME DISPLAY_BOARD_NAME MAINBOARD_DISPLAY_NAME BOARD_CLASS BOARD_NAME MCU CHIP DRIVER_NAMES
 
 # ====================================
 # OS-specific shell/commands
@@ -56,13 +63,15 @@ CORE_DIR        := core
 HAL_INCLUDE_DIR := hal/include
 BOARD_DIR       := boards/$(BOARD_CLASS)/$(BOARD_NAME)
 BOARD_BLD_DIR   := $(BOARD_DIR)/build
+MAINBOARD_DISPLAY_DIR := boards/display_module/$(MAINBOARD_DISPLAY_NAME)
 DRIVER_DIRS     := $(foreach name,$(DRIVER_NAMES),drivers/$(name))
-OBJ_DIR         := build/$(BUILD_TARGET)/$(BOARD_NAME)
+MAINBOARD_DISPLAY_OBJ_SUFFIX := $(if $(MAINBOARD_DISPLAY_ENABLED),-with-$(MAINBOARD_DISPLAY_NAME),)
+OBJ_DIR         := build/$(BUILD_TARGET)/$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)
 
 # =========================
 # Outputs
 # =========================
-TARGET  := pcb-cnc-mill-$(BUILD_TARGET)-$(BOARD_NAME)
+TARGET  := pcb-cnc-mill-$(BUILD_TARGET)-$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)
 OUT_ELF := $(OBJ_DIR)$(SEP)$(TARGET).elf
 OUT_MAP := $(OBJ_DIR)$(SEP)$(TARGET).map
 OUT_BIN := $(OBJ_DIR)$(SEP)$(TARGET).bin
@@ -79,6 +88,9 @@ LDFLAGS   := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(LD_
 
 CFLAGS += -I$(CORE_DIR) -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
 CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
+ifneq ($(MAINBOARD_DISPLAY_ENABLED),)
+  CFLAGS += -DMAINBOARD_HAS_DISPLAY_MODULE=1 -I$(CORE_DIR)/display -I$(MAINBOARD_DISPLAY_DIR)
+endif
 
 # =========================
 # Sources
@@ -89,9 +101,11 @@ COMMON_CSRCS := core/runtime/scheduler.c \
 CSRCS := $(ENTRY_CSRCS) \
          $(COMMON_CSRCS) \
          $(wildcard $(BOARD_DIR)/*.c) \
+         $(if $(MAINBOARD_DISPLAY_ENABLED),$(wildcard $(MAINBOARD_DISPLAY_DIR)/*.c)) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.c))
 
 ASRCS := $(wildcard $(BOARD_DIR)/*.s) \
+         $(if $(MAINBOARD_DISPLAY_ENABLED),$(wildcard $(MAINBOARD_DISPLAY_DIR)/*.s)) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.s))
 
 C_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(CSRCS))
@@ -127,7 +141,7 @@ $(OBJ_DIR)/%.o: %.s
 # =========================
 .PHONY: mainboard
 mainboard:
-	"$(MAKE)" build BUILD_TARGET=mainboard BOARD_CLASS=mainboard BOARD_NAME=$(MAIN_BOARD_NAME) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) MCU=cortex-m0plus CHIP=STM32G0B1 DRIVER_NAMES="$(DRIVER_NAMES)"
+	"$(MAKE)" build BUILD_TARGET=mainboard BOARD_CLASS=mainboard BOARD_NAME=$(MAIN_BOARD_NAME) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) MCU=cortex-m0plus CHIP=STM32G0B1 DRIVER_NAMES="$(DRIVER_NAMES)"
 
 .PHONY: display
 display:
@@ -135,8 +149,8 @@ display:
 
 .PHONY: build
 build:
-	"$(MAKE)" clean BUILD_TARGET=$(BUILD_TARGET) BOARD_CLASS=$(BOARD_CLASS) BOARD_NAME=$(BOARD_NAME) MCU=$(MCU) CHIP=$(CHIP)
-	"$(MAKE)" all BUILD_TARGET=$(BUILD_TARGET) BOARD_CLASS=$(BOARD_CLASS) BOARD_NAME=$(BOARD_NAME) MCU=$(MCU) CHIP=$(CHIP) DRIVER_NAMES="$(DRIVER_NAMES)"
+	"$(MAKE)" clean BUILD_TARGET=$(BUILD_TARGET) BOARD_CLASS=$(BOARD_CLASS) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) MCU=$(MCU) CHIP=$(CHIP)
+	"$(MAKE)" all BUILD_TARGET=$(BUILD_TARGET) BOARD_CLASS=$(BOARD_CLASS) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) MCU=$(MCU) CHIP=$(CHIP) DRIVER_NAMES="$(DRIVER_NAMES)"
 
 # ===============================================
 # Flash / Debug (delegated to board build dir)
@@ -144,12 +158,12 @@ build:
 .PHONY: flash
 flash:
 	@echo [FLASH] $(CHIP) $(BUILD_TARGET) board $(BOARD_NAME)
-	"$(MAKE)" -C $(BOARD_BLD_DIR) flash BUILD_TARGET=$(BUILD_TARGET) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) DISPLAY_BOARD_NAME=$(DISPLAY_BOARD_NAME) BOARD_NAME=$(BOARD_NAME) DRIVER_NAMES="$(DRIVER_NAMES)"
+	"$(MAKE)" -C $(BOARD_BLD_DIR) flash BUILD_TARGET=$(BUILD_TARGET) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) DISPLAY_BOARD_NAME=$(DISPLAY_BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) BOARD_NAME=$(BOARD_NAME) DRIVER_NAMES="$(DRIVER_NAMES)"
 
 .PHONY: debug
 debug:
 	@echo [DEBUG] $(CHIP) $(BUILD_TARGET) board $(BOARD_NAME)
-	"$(MAKE)" -C $(BOARD_BLD_DIR) debug BUILD_TARGET=$(BUILD_TARGET) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) DISPLAY_BOARD_NAME=$(DISPLAY_BOARD_NAME) BOARD_NAME=$(BOARD_NAME) DRIVER_NAMES="$(DRIVER_NAMES)"
+	"$(MAKE)" -C $(BOARD_BLD_DIR) debug BUILD_TARGET=$(BUILD_TARGET) MAIN_BOARD_NAME=$(MAIN_BOARD_NAME) DISPLAY_BOARD_NAME=$(DISPLAY_BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) BOARD_NAME=$(BOARD_NAME) DRIVER_NAMES="$(DRIVER_NAMES)"
 
 # =========================
 # Clean
@@ -172,6 +186,7 @@ print-config:
 	@echo BUILD_TARGET=$(BUILD_TARGET)
 	@echo MAIN_BOARD_NAME=$(MAIN_BOARD_NAME)
 	@echo DISPLAY_BOARD_NAME=$(DISPLAY_BOARD_NAME)
+	@echo MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME)
 	@echo BOARD_CLASS=$(BOARD_CLASS)
 	@echo BOARD_NAME=$(BOARD_NAME)
 	@echo MCU=$(MCU)

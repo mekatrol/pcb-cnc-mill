@@ -8,6 +8,9 @@
 - Add board role selection for `mainboard`, `display`, and `toolhead`.
 - Add board feature flags so common code can include only the drivers each
   board needs.
+- Expand mainboard-attached display module support beyond the current
+  Mini12864 placeholder by verifying pins, LCD controller behavior, encoder
+  wiring, and bounded scheduler tasks.
 - Add hardware pin map for steppers, spindle, endstops, probe, fans, and emergency stop.
 - Add config file format for machine limits and board settings.
 - Add serial command transport.
@@ -113,6 +116,9 @@
 
 - Add shared display task model for screen refresh, touch, encoder, buttons,
   buzzer, and LEDs.
+- Split shared display menu state from hardware ownership so standalone display
+  firmware and mainboard-attached display modules can share screens and command
+  generation.
 - Add display command work queue for draw text, draw region, clear region,
   status update, menu update, and progress update commands.
 - Add display command coalescing so repeated redraws or status updates can merge

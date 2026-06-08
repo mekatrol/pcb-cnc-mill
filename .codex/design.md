@@ -73,6 +73,10 @@ interrupt priorities, and enabled features.
 - Display firmware uses the same scheduler and driver model for LCD refresh,
   touch input, encoder input, buttons, buzzer, LEDs, USB or serial transport,
   SD card access, and CAN or serial communication with the mainboard.
+- Mainboard-attached display modules use the mainboard firmware image and
+  scheduler model. They provide panel-local display, input, and feedback
+  service code, but the mainboard owns clocks, reset handling, machine state,
+  safety state, motion validation, and firmware update behavior.
 - Toolhead firmware uses the same scheduler and driver model for CAN
   communication, local IO, sensors, fans, heaters if fitted, probe input, and
   any local driver control.
@@ -80,6 +84,8 @@ interrupt priorities, and enabled features.
 The shared runtime should provide:
 
 - Startup hooks for board clock, memory, and peripheral setup.
+- Optional attached-module hooks for hardware that shares the mainboard image,
+  such as compact LCD panels connected to a mainboard expansion header.
 - A priority task table with task name, period, priority order, enabled flag,
   callback, and scheduler-owned running state.
 - Priority work queues for one-shot commands such as chirp, draw text, parse a

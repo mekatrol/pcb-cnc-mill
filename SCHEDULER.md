@@ -30,6 +30,12 @@ Use the scheduler for normal firmware service work:
 - advancing low-priority feedback such as chirps and LEDs
 - low-rate status, diagnostics, and housekeeping
 
+Standalone display firmware has its own scheduler instance because it has its
+own MCU and firmware image. A mainboard-attached display module shares the
+mainboard firmware image and should register or expose display/input service
+tasks to the mainboard scheduler once the mainboard entry point moves from the
+current simple loop to scheduler dispatch.
+
 Use preemptive-priority scheduler tasks for urgent bounded service work such as
 planner queue refill, step generator starvation checks, feed hold or resume
 follow-up, and fast safety state propagation. Do not use scheduler callbacks

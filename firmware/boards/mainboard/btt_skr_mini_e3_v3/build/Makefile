@@ -12,13 +12,15 @@ else
 endif
 
 BOARD_NAME ?= btt_skr_mini_e3_v3
-TARGET     := pcb-cnc-mill-mainboard-$(BOARD_NAME)
+MAINBOARD_DISPLAY_NAME ?= none
+MAINBOARD_DISPLAY_SUFFIX := $(if $(filter none,$(MAINBOARD_DISPLAY_NAME)),,-with-$(MAINBOARD_DISPLAY_NAME))
+TARGET     := pcb-cnc-mill-mainboard-$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BOARD_DIR    := $(abspath $(MAKEFILE_DIR)..)
 ROOT_DIR     := $(abspath $(BOARD_DIR)../../../../..)
 FIRMWARE_DIR := $(ROOT_DIR)$(SEP)firmware
-OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)mainboard$(SEP)$(BOARD_NAME)
+OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)mainboard$(SEP)$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
@@ -43,7 +45,7 @@ LDFLAGS := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(MAKEF
 
 .PHONY: all
 all:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME)
 
 $(OUT_BIN): $(OUT_ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -78,4 +80,4 @@ debug: all
 
 .PHONY: clean
 clean:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME)
