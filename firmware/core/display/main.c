@@ -1,5 +1,5 @@
 #include "display_hal.h"
-#include "runtime/scheduler.h"
+#include "runtime_scheduler.h"
 
 static void display_background_service_task(void)
 {

@@ -6,7 +6,7 @@ MAIN_BOARD_NAME    ?= btt_skr_mini_e3_v3
 DISPLAY_BOARD_NAME ?= btt_tft35_e3
 MAINBOARD_DISPLAY_NAME ?= none
 FLASH_LAYOUT       ?= bootloader
-DRIVER_NAMES       ?=
+DRIVER_NAMES       ?= usb usb_cdc
 
 ifneq ($(filter mainboard,$(MAKECMDGOALS)),)
   BUILD_TARGET := mainboard
@@ -67,16 +67,17 @@ SIZE    := arm-none-eabi-size
 # =========================
 # Directories
 # =========================
-SRC_DIR         := .
-CORE_DIR        := core
-HAL_INCLUDE_DIR := hal/include
-BOARD_DIR       := boards/$(BOARD_CLASS)/$(BOARD_NAME)
-BOARD_BLD_DIR   := $(BOARD_DIR)/build
-MAINBOARD_DISPLAY_DIR := boards/display_module/$(MAINBOARD_DISPLAY_NAME)
-DRIVER_DIRS     := $(foreach name,$(DRIVER_NAMES),drivers/$(name))
+SRC_DIR                      := .
+CONFIG_DIR                   := config
+CORE_DIR                     := core
+HAL_INCLUDE_DIR              := hal/include
+BOARD_DIR                    := boards/$(BOARD_CLASS)/$(BOARD_NAME)
+BOARD_BLD_DIR                := $(BOARD_DIR)/build
+MAINBOARD_DISPLAY_DIR        := boards/display_module/$(MAINBOARD_DISPLAY_NAME)
+DRIVER_DIRS                  := $(foreach name,$(DRIVER_NAMES),drivers/$(name))
 MAINBOARD_DISPLAY_OBJ_SUFFIX := $(if $(MAINBOARD_DISPLAY_ENABLED),-with-$(MAINBOARD_DISPLAY_NAME),)
-FLASH_LAYOUT_OBJ_SUFFIX := $(if $(filter direct,$(FLASH_LAYOUT)),-direct,)
-OBJ_DIR         := build/$(BUILD_TARGET)/$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)$(FLASH_LAYOUT_OBJ_SUFFIX)
+FLASH_LAYOUT_OBJ_SUFFIX      := $(if $(filter direct,$(FLASH_LAYOUT)),-direct,)
+OBJ_DIR                      := build/$(BUILD_TARGET)/$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)$(FLASH_LAYOUT_OBJ_SUFFIX)
 
 -include $(BOARD_BLD_DIR)$(SEP)bootloader.mk
 
@@ -117,14 +118,14 @@ CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata
 ASFLAGS  := $(CPUFLAGS)
 
 LD_SCRIPT := $(BOARD_BLD_DIR)$(SEP)linker.ld
-LDFLAGS   := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) \
+LDFLAGS   := $(CPUFLAGS) -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) \
              -Wl,--defsym=APP_FLASH_ORIGIN=$(APP_FLASH_ORIGIN) \
              -Wl,--defsym=APP_FLASH_LENGTH=$(APP_FLASH_LENGTH) \
              -Wl,--defsym=IMAGE_FLASH_ORIGIN=$(IMAGE_FLASH_ORIGIN) \
              -Wl,--defsym=IMAGE_FLASH_LENGTH=$(IMAGE_FLASH_LENGTH) \
              -T$(LD_SCRIPT)
 
-CFLAGS += -I$(CORE_DIR) -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
+CFLAGS += -I$(CONFIG_DIR) -I$(CORE_DIR) -I$(CORE_DIR)/include -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
 CFLAGS += -I$(BOARD_DIR)/include -I$(BOARD_DIR)/include/core
 CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
 ifneq ($(MAINBOARD_DISPLAY_ENABLED),)
@@ -134,8 +135,11 @@ endif
 # =========================
 # Sources
 # =========================
-COMMON_CSRCS := core/runtime/scheduler.c \
-                core/runtime/chirp.c
+COMMON_CSRCS := core/runtime/runtime_scheduler.c \
+                core/runtime/chirp.c \
+                core/runtime/circular_buffer.c \
+                core/runtime/motion.c \
+                core/runtime/diagnostics.c
 DISPLAY_CSRCS := core/display/display_render.c \
                  core/display/display_strings.c \
                  core/display/display_surface.c

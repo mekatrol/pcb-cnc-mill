@@ -1,205 +1,165 @@
-.syntax unified
-.cpu cortex-m0plus
+.syntax       unified
+.cpu          cortex-m0plus
 .thumb
 
-.global g_pfnVectors
-.global Reset_Handler
-.global Default_Handler
+.global       g_pfnVectors
+.global       Reset_Handler
+.global       SysTick_IRQHandler
+.global       EXTI0_1_IRQHandler
+.global       EXTI2_3_IRQHandler
+.global       USB_UCPD1_2_IRQHandler
+.global       TIM6_DAC_IRQHandler
+.global       TIM7_IRQHandler
+.global       TIM14_IRQHandler
+.global       USART2_IRQHandler
+.global       USART3_4_LPUART1_IRQHandler
+.global       Default_Handler
 
-.section .isr_vector, "a", %progbits
-.align 2
-.type g_pfnVectors, %object
+.section      .isr_vector, "a", %progbits
+.align        2
+.type         g_pfnVectors, %object
+
+/***********************************************************************************************************************************************
+ * NVIC - Nested vectored interrupt controller
+ +----------+----------+-----------------+---------------------------+---------------------------------------------------------------+---------+
+ | Position | Priority | Type of Priority| Acronym                   | Description                                                   | Address |
+ +----------+----------+-----------------+---------------------------+---------------------------------------------------------------+---------+
+ | 0        | 3        | Interrupt       | WWDG                      | Window watchdog                                               | 0x0004  |
+ | 1        | 3        | Interrupt       | PVD                       | PVD through EXTI line                                         | 0x0008  |
+ | 2        | 3        | Interrupt       | RTC                       | RTC/TAMP                                                      | 0x000C  |
+ | 3        | 3        | Interrupt       | FLASH                     | Flash                                                         | 0x0010  |
+ | 4        | 3        | Interrupt       | RCC                       | Reset and clock control                                       | 0x0014  |
+ | 5        | 3        | Interrupt       | EXTI0_1                   | EXTI Line 0 and 1 interrupts                                  | 0x0018  |
+ | 6        | 3        | Interrupt       | EXTI2_3                   | EXTI Line 2 and 3 interrupts                                  | 0x001C  |
+ | 7        | 3        | Interrupt       | EXTI4_15                  | EXTI Line 4 to 15 interrupts                                  | 0x0020  |
+ | 8        | 3        | Interrupt       | UCPD1                     | USB Type-C Power Delivery                                     | 0x0024  |
+ | 9        | 3        | Interrupt       | DMA1_Ch1                  | DMA1 Channel 1                                                | 0x0028  |
+ | 10       | 3        | Interrupt       | DMA1_Ch2_3                | DMA1 Channels 2 and 3                                         | 0x002C  |
+ | 11       | 3        | Interrupt       | DMA1_Ch4_5_6_7_DMA2_Ch1_2 | DMA1 Ch 4-7, DMA2 Ch 1-2                                      | 0x0030  |
+ | 12       | 3        | Interrupt       | ADC_COMP                  | ADC and Comparator                                            | 0x0034  |
+ | 13       | 3        | Interrupt       | TIM1_BRK_UP_TRG_COM       | TIM1 Break, Update, Trigger and Commutation interrupts        | 0x0038  |
+ | 14       | 3        | Interrupt       | TIM1_CC                   | TIM1 Capture Compare                                          | 0x003C  |
+ | 15       | 3        | Interrupt       | TIM2                      | TIM2                                                          | 0x0040  |
+ | 16       | 3        | Interrupt       | TIM3                      | TIM3                                                          | 0x0044  |
+ | 17       | 3        | Interrupt       | TIM6_DAC_LPTIM1           | TIM6, DAC, LPTIM1 interrupts                                  | 0x0048  |
+ | 18       | 3        | Interrupt       | TIM7_LPTIM2               | TIM7, LPTIM2 interrupts                                       | 0x004C  |
+ | 19       | 3        | Interrupt       | TIM14                     | TIM14                                                         | 0x0050  |
+ | 20       | 3        | Interrupt       | TIM15                     | TIM15                                                         | 0x0054  |
+ | 21       | 3        | Interrupt       | TIM16                     | TIM16                                                         | 0x0058  |
+ | 22       | 3        | Interrupt       | TIM17                     | TIM17                                                         | 0x005C  |
+ | 23       | 3        | Interrupt       | I2C1                      | I2C1                                                          | 0x0060  |
+ | 24       | 3        | Interrupt       | I2C2                      | I2C2                                                          | 0x0064  |
+ | 25       | 3        | Interrupt       | SPI1                      | SPI1                                                          | 0x0068  |
+ | 26       | 3        | Interrupt       | SPI2                      | SPI2                                                          | 0x006C  |
+ | 27       | 3        | Interrupt       | USART1                    | USART1                                                        | 0x0070  |
+ | 28       | 3        | Interrupt       | USART2                    | USART2                                                        | 0x0074  |
+ | 29       | 3        | Interrupt       | USART3_USART4_LPUART1     | USART3/4 and LPUART1                                          | 0x0078  |
+ | 30       | 3        | Interrupt       | CEC_CAN                   | CEC and CAN                                                   | 0x007C  |
+ | 31       | 3        | Interrupt       | USB_UCPD2                 | USB and UCPD2                                                 | 0x0080  |
+ +----------+----------+-----------------+---------------------------+---------------------------------------------------------------+---------+*/
 
 g_pfnVectors:
-  .word _estack
-  .word Reset_Handler
-  .word NMI_Handler
-  .word HardFault_Handler
-  .word 0
-  .word 0
-  .word 0
-  .word 0
-  .word 0
-  .word 0
-  .word 0
-  .word SVC_Handler
-  .word 0
-  .word 0
-  .word PendSV_Handler
-  .word SysTick_Handler
+.word         _estack                       // Initial stack pointer
+.word         Reset_Handler                 // Reset
+.word         NMI_Handler
+.word         HardFault_Handler
+.word         0, 0, 0, 0                    // Reserved
+.word         0, 0, 0                       // Reserved
+.word         SVC_Handler
+.word         0                             // Reserved
+.word         0                             // Reserved
+.word         PendSV_Handler
+.word         SysTick_Handler
 
-  /* STM32G0B1 interrupt vectors. Keep unused IRQs on the default handler. */
-  .word WWDG_IRQHandler
-  .word PVD_IRQHandler
-  .word RTC_TAMP_IRQHandler
-  .word FLASH_IRQHandler
-  .word RCC_CRS_IRQHandler
-  .word EXTI0_1_IRQHandler
-  .word EXTI2_3_IRQHandler
-  .word EXTI4_15_IRQHandler
-  .word UCPD1_2_IRQHandler
-  .word DMA1_Channel1_IRQHandler
-  .word DMA1_Channel2_3_IRQHandler
-  .word DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQHandler
-  .word ADC_COMP_IRQHandler
-  .word TIM1_BRK_UP_TRG_COM_IRQHandler
-  .word TIM1_CC_IRQHandler
-  .word TIM2_IRQHandler
-  .word TIM3_TIM4_IRQHandler
-  .word TIM6_DAC_LPTIM1_IRQHandler
-  .word TIM7_LPTIM2_IRQHandler
-  .word TIM14_IRQHandler
-  .word TIM15_IRQHandler
-  .word TIM16_IRQHandler
-  .word TIM17_IRQHandler
-  .word I2C1_IRQHandler
-  .word I2C2_IRQHandler
-  .word SPI1_IRQHandler
-  .word SPI2_IRQHandler
-  .word USART1_IRQHandler
-  .word USART2_IRQHandler
-  .word USART3_4_LPUART1_IRQHandler
-  .word CEC_CAN_IRQHandler
-  .word USB_UCPD1_2_IRQHandler
+  /* IRQs: STM32G0B1 has 48 IRQs */
+.word         Default_Handler               // IRQ 0
+.word         Default_Handler               // IRQ 1
+.word         Default_Handler               // IRQ 2
+.word         Default_Handler               // IRQ 3
+.word         Default_Handler               // IRQ 4
+.word         EXTI0_1_IRQHandler            // IRQ 5
+.word         EXTI2_3_IRQHandler            // IRQ 6
+.word         Default_Handler               // IRQ 7
+.word         USB_UCPD1_2_IRQHandler        // IRQ 8
+.word         Default_Handler               // IRQ 9
+.word         Default_Handler               // IRQ10
+.word         Default_Handler               // IRQ11
+.word         Default_Handler               // IRQ12
+.word         Default_Handler               // IRQ13
+.word         Default_Handler               // IRQ14
+.word         Default_Handler               // IRQ15
+.word         Default_Handler               // IRQ16
+.word         TIM6_DAC_IRQHandler           // IRQ17 = TIM6/DAC
+.word         TIM7_IRQHandler               // IRQ18 = TIM7
+.word         TIM14_IRQHandler              // IRQ19
+.word         Default_Handler               // IRQ20
+.word         Default_Handler               // IRQ21
+.word         Default_Handler               // IRQ22
+.word         Default_Handler               // IRQ23
+.word         Default_Handler               // IRQ24
+.word         Default_Handler               // IRQ25
+.word         Default_Handler               // IRQ26
+.word         Default_Handler               // IRQ27
+.word         USART2_IRQHandler             // IRQ28
+.word         USART3_4_LPUART1_IRQHandler   // IRQ29
+.word         Default_Handler               // IRQ30
+.word         Default_Handler               // IRQ31
 
-.size g_pfnVectors, . - g_pfnVectors
+.size         g_pfnVectors, . - g_pfnVectors
 
-.section .text.Reset_Handler, "ax", %progbits
-.type Reset_Handler, %function
+.global       main
+.type         main, %function
+
+// Reset Handler
+.section      .text.Reset_Handler
+.type         Reset_Handler, %function
 Reset_Handler:
-  cpsid i
-
-  /* Point the Vector Table Offset Register (VTOR) at the active app vectors.
-     BTT bootloader builds run above the factory 8 KiB bootloader, while
-     direct-SWD recovery builds run from the start of internal flash. */
-  ldr r0, =0xE000ED08
-  ldr r1, =g_pfnVectors
-  str r1, [r0]
-
-  /* A bootloader may leave SysTick running against its own vector table and
-     clock assumptions. Stop it before clearing .bss; the board HAL starts the
-     project tick after clocks and vectors are owned by this app. */
-  ldr r0, =0xE000E010
-  movs r1, #0
-  str r1, [r0]
-  str r1, [r0, #4]
-  str r1, [r0, #8]
-
-  ldr r0, =_sbss
-  ldr r1, =_ebss
-  movs r2, #0
+   // Zero BSS
+   ldr        r0, =_sbss
+   ldr        r1, =_ebss
+   movs       r2, #0
 
 zero_bss:
-  cmp r0, r1
-  bcc zero_bss_word
-  b copy_data_start
+   cmp        r0, r1
+   bcc        1f
+   b          zero_done
+1:
+   str        r2, [r0]
+   adds       r0, r0, #4
+   b          zero_bss
 
-zero_bss_word:
-  str r2, [r0]
-  adds r0, r0, #4
-  b zero_bss
+zero_done:
 
-copy_data_start:
-  ldr r0, =_sdata
-  ldr r1, =_edata
-  ldr r2, =_sidata
+   // Copy .data section from FLASH to RAM
+   ldr        r0, =_sdata                   // dest
+   ldr        r1, =_edata                   // end
+   ldr        r2, =_sidata                  // source
 
 copy_data:
-  cmp r0, r1
-  bcc copy_data_word
-  b call_main
+   cmp        r0, r1
+   bcc        copy_more
+   b          call_main
 
-copy_data_word:
-  ldr r3, [r2]
-  str r3, [r0]
-  adds r0, r0, #4
-  adds r2, r2, #4
-  b copy_data
+copy_more:
+   ldr        r3, [r2]
+   str        r3, [r0]
+   adds       r0, r0, #4
+   adds       r2, r2, #4
+   b          copy_data
+
 
 call_main:
-  bl main
-  b .
+   bl         main
+   b          .
 
-.size Reset_Handler, . - Reset_Handler
-
-.section .text.Default_Handler, "ax", %progbits
-.type Default_Handler, %function
+// Default Handlers
 Default_Handler:
-  b .
+   b          .
 
-.size Default_Handler, . - Default_Handler
+// Hard fault Handler
+HardFault_Handler:
+   b          .
 
-.weak NMI_Handler
-.thumb_set NMI_Handler, Default_Handler
-.weak HardFault_Handler
-.thumb_set HardFault_Handler, Default_Handler
-.weak SVC_Handler
-.thumb_set SVC_Handler, Default_Handler
-.weak PendSV_Handler
-.thumb_set PendSV_Handler, Default_Handler
-.weak SysTick_Handler
-.thumb_set SysTick_Handler, Default_Handler
-.weak WWDG_IRQHandler
-.thumb_set WWDG_IRQHandler, Default_Handler
-.weak PVD_IRQHandler
-.thumb_set PVD_IRQHandler, Default_Handler
-.weak RTC_TAMP_IRQHandler
-.thumb_set RTC_TAMP_IRQHandler, Default_Handler
-.weak FLASH_IRQHandler
-.thumb_set FLASH_IRQHandler, Default_Handler
-.weak RCC_CRS_IRQHandler
-.thumb_set RCC_CRS_IRQHandler, Default_Handler
-.weak EXTI0_1_IRQHandler
-.thumb_set EXTI0_1_IRQHandler, Default_Handler
-.weak EXTI2_3_IRQHandler
-.thumb_set EXTI2_3_IRQHandler, Default_Handler
-.weak EXTI4_15_IRQHandler
-.thumb_set EXTI4_15_IRQHandler, Default_Handler
-.weak UCPD1_2_IRQHandler
-.thumb_set UCPD1_2_IRQHandler, Default_Handler
-.weak DMA1_Channel1_IRQHandler
-.thumb_set DMA1_Channel1_IRQHandler, Default_Handler
-.weak DMA1_Channel2_3_IRQHandler
-.thumb_set DMA1_Channel2_3_IRQHandler, Default_Handler
-.weak DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQHandler
-.thumb_set DMA1_Ch4_7_DMA2_Ch1_5_DMAMUX1_OVR_IRQHandler, Default_Handler
-.weak ADC_COMP_IRQHandler
-.thumb_set ADC_COMP_IRQHandler, Default_Handler
-.weak TIM1_BRK_UP_TRG_COM_IRQHandler
-.thumb_set TIM1_BRK_UP_TRG_COM_IRQHandler, Default_Handler
-.weak TIM1_CC_IRQHandler
-.thumb_set TIM1_CC_IRQHandler, Default_Handler
-.weak TIM2_IRQHandler
-.thumb_set TIM2_IRQHandler, Default_Handler
-.weak TIM3_TIM4_IRQHandler
-.thumb_set TIM3_TIM4_IRQHandler, Default_Handler
-.weak TIM6_DAC_LPTIM1_IRQHandler
-.thumb_set TIM6_DAC_LPTIM1_IRQHandler, Default_Handler
-.weak TIM7_LPTIM2_IRQHandler
-.thumb_set TIM7_LPTIM2_IRQHandler, Default_Handler
-.weak TIM14_IRQHandler
-.thumb_set TIM14_IRQHandler, Default_Handler
-.weak TIM15_IRQHandler
-.thumb_set TIM15_IRQHandler, Default_Handler
-.weak TIM16_IRQHandler
-.thumb_set TIM16_IRQHandler, Default_Handler
-.weak TIM17_IRQHandler
-.thumb_set TIM17_IRQHandler, Default_Handler
-.weak I2C1_IRQHandler
-.thumb_set I2C1_IRQHandler, Default_Handler
-.weak I2C2_IRQHandler
-.thumb_set I2C2_IRQHandler, Default_Handler
-.weak SPI1_IRQHandler
-.thumb_set SPI1_IRQHandler, Default_Handler
-.weak SPI2_IRQHandler
-.thumb_set SPI2_IRQHandler, Default_Handler
-.weak USART1_IRQHandler
-.thumb_set USART1_IRQHandler, Default_Handler
-.weak USART2_IRQHandler
-.thumb_set USART2_IRQHandler, Default_Handler
-.weak USART3_4_LPUART1_IRQHandler
-.thumb_set USART3_4_LPUART1_IRQHandler, Default_Handler
-.weak CEC_CAN_IRQHandler
-.thumb_set CEC_CAN_IRQHandler, Default_Handler
-.weak USB_UCPD1_2_IRQHandler
-.thumb_set USB_UCPD1_2_IRQHandler, Default_Handler
+   NMI_Handler = Default_Handler
+   SVC_Handler = Default_Handler
+   PendSV_Handler = Default_Handler

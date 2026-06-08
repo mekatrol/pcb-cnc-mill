@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "board_hal.h"
+#include "clock.h"
+#include "timers.h"
+
 void mainboard_initialize_hardware(void);
 void mainboard_run_background_tasks(void);
 bool mainboard_display_serial_byte_available(void);

@@ -1,4 +1,4 @@
-#include "runtime/chirp.h"
+#include "chirp.h"
 
 enum
 {
