@@ -152,11 +152,21 @@ card root. For the default GD32 TFT35 E3 display, copy
 display SD card root. These images are linked above the factory bootloader
 regions so normal updates do not replace BTT's bootloader.
 
+If a board has previously been direct-flashed and no longer has a working BTT
+bootloader at the start of flash, build a direct-SWD recovery image instead.
+For the default TFT35 E3 display this links the app at `0x08000000` and flashes
+it under reset:
+
+```sh
+make -C firmware/boards/display/btt_tft35_e3/build flash-direct-reset
+```
+
 Check the selected build settings with:
 
 ```sh
 make -C firmware print-config
 make -C firmware print-config BUILD_TARGET=display
+make -C firmware print-config BUILD_TARGET=display FLASH_LAYOUT=direct
 make -C firmware print-config \
   BUILD_TARGET=mainboard \
   MAINBOARD_DISPLAY_NAME=btt_mini12864
@@ -180,8 +190,10 @@ make -C firmware print-config \
   provides the monotonic millisecond clock used by the shared runtime
   scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
   details stay in the board code. The image is linked at the BTT display app
-  offset `0x08003000`. See [`HAL_API.md`](HAL_API.md) for the display HAL
-  methods that the shared display entry point calls.
+  offset `0x08003000` by default, or at `0x08000000` with
+  `FLASH_LAYOUT=direct` for SWD recovery without a bootloader. See
+  [`HAL_API.md`](HAL_API.md) for the display HAL methods that the shared
+  display entry point calls.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD

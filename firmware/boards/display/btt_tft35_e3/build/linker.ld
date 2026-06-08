@@ -2,8 +2,7 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-  /* Leave the factory BTT TFT35 SD-card bootloader intact. */
-  FLASH (rx) : ORIGIN = 0x08003000, LENGTH = 244K
+  FLASH (rx) : ORIGIN = APP_FLASH_ORIGIN, LENGTH = APP_FLASH_LENGTH
   RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 64K
 }
 

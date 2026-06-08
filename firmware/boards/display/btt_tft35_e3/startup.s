@@ -38,9 +38,9 @@ g_pfnVectors:
 .section .text.Reset_Handler, "ax", %progbits
 .type Reset_Handler, %function
 Reset_Handler:
-  /* The BTT TFT35 bootloader jumps to this app at 0x08003000. Point the
-     Vector Table Offset Register (VTOR) at the app vectors before any
-     interrupts can use the bootloader table. */
+  /* Point the Vector Table Offset Register (VTOR) at the active app vectors.
+     Bootloader builds run above the factory BTT bootloader, while direct-SWD
+     recovery builds run from the start of internal flash. */
   ldr r0, =0xE000ED08
   ldr r1, =g_pfnVectors
   str r1, [r0]

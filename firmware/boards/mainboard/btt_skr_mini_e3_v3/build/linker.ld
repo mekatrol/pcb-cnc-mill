@@ -2,8 +2,7 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-  /* Leave the factory BTT 8 KiB SD-card bootloader intact. */
-  FLASH (rx) : ORIGIN = 0x08002000, LENGTH = 504K
+  FLASH (rx) : ORIGIN = APP_FLASH_ORIGIN, LENGTH = APP_FLASH_LENGTH
   RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 144K
 }
 

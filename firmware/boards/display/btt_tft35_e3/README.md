@@ -45,6 +45,17 @@ ID. `make flash` writes the application at `0x08003000`. It does not
 intentionally erase or program the BTT display bootloader region at
 `0x08000000` through `0x08002fff`.
 
+If the display was previously direct-flashed at `0x08000000`, the BTT
+bootloader may no longer be present to jump to the app at `0x08003000`. In that
+case use the direct-SWD recovery layout:
+
+```sh
+make flash-direct-reset
+```
+
+This builds `firmware/build/display/btt_tft35_e3-direct/` and writes the app at
+`0x08000000`. Use it for bench recovery, not for SD-card updates.
+
 Start an OpenOCD debug session:
 
 ```sh

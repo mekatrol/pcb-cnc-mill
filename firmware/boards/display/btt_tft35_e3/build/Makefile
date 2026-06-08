@@ -12,20 +12,26 @@ else
 endif
 
 BOARD_NAME ?= btt_tft35_e3
-TARGET     := pcb-cnc-mill-display-$(BOARD_NAME)
+FLASH_LAYOUT ?= bootloader
+FLASH_LAYOUT_SUFFIX := $(if $(filter direct,$(FLASH_LAYOUT)),-direct,)
+TARGET     := pcb-cnc-mill-display-$(BOARD_NAME)$(FLASH_LAYOUT_SUFFIX)
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BOARD_DIR    := $(abspath $(MAKEFILE_DIR)..)
 ROOT_DIR     := $(abspath $(BOARD_DIR)../../../../..)
 FIRMWARE_DIR := $(ROOT_DIR)$(SEP)firmware
-OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)display$(SEP)$(BOARD_NAME)
+OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)display$(SEP)$(BOARD_NAME)$(FLASH_LAYOUT_SUFFIX)
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
 STFLASH := st-flash
 
-FLASH_ADDR := 0x08003000
+ifeq ($(FLASH_LAYOUT),direct)
+  FLASH_ADDR := 0x08000000
+else
+  FLASH_ADDR := 0x08003000
+endif
 
 CPUFLAGS := -mcpu=cortex-m3 -mthumb
 CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections
@@ -46,7 +52,7 @@ LDFLAGS := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(MAKEF
 
 .PHONY: all
 all:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=display DISPLAY_BOARD_NAME=$(BOARD_NAME) BOARD_CLASS=display BOARD_NAME=$(BOARD_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=display DISPLAY_BOARD_NAME=$(BOARD_NAME) BOARD_CLASS=display BOARD_NAME=$(BOARD_NAME) FLASH_LAYOUT=$(FLASH_LAYOUT)
 
 $(OUT_BIN): $(OUT_ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -71,6 +77,10 @@ flash-reset: all
 	@echo "[FLASH] Flashing binary with ST-Link"
 	$(STFLASH) --connect-under-reset --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
 
+.PHONY: flash-direct-reset
+flash-direct-reset:
+	"$(MAKE)" flash-reset FLASH_LAYOUT=direct
+
 .PHONY: debug
 debug: all
 	@echo "[OPENOCD] Starting debug session"
@@ -83,4 +93,4 @@ debug: all
 
 .PHONY: clean
 clean:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=display DISPLAY_BOARD_NAME=$(BOARD_NAME) BOARD_CLASS=display BOARD_NAME=$(BOARD_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=display DISPLAY_BOARD_NAME=$(BOARD_NAME) BOARD_CLASS=display BOARD_NAME=$(BOARD_NAME) FLASH_LAYOUT=$(FLASH_LAYOUT)
