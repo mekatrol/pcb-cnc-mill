@@ -23,6 +23,13 @@ enum
   TOUCH_MISO_PIN = 4,  // Upstream BTT TFT35 V3.0: XPT2046_MISO PE4
   TOUCH_MOSI_PIN = 3,  // Upstream BTT TFT35 V3.0: XPT2046_MOSI PE3
   TOUCH_PEN_PIN = 13,  // Upstream BTT TFT35 V3.0: XPT2046_TPEN PC13
+  MAINBOARD_SERIAL_TX_PIN = 2, // TFT35 RS232 connector: PA2 / USART1_TX
+  MAINBOARD_SERIAL_RX_PIN = 3, // TFT35 RS232 connector: PA3 / USART1_RX
+  MAINBOARD_SERIAL_BAUD = 115200,
+  MAINBOARD_SERIAL_HEARTBEAT_BYTE = 0xA5,
+  MAINBOARD_SERIAL_RECEIVE_BYTES_PER_SERVICE = 32,
+  MAINBOARD_SERIAL_LINK_TIMEOUT_MS = 1500,
+  APB1_PERIPHERAL_CLOCK_HZ = SYSTEM_CORE_CLOCK_HZ / 2u,
   KNOB_LED_PIXELS = 2, // Upstream GD TFT35 E3 V3.0: NEOPIXEL_PIXELS 2
   // Match upstream Knob_LED.c's integer math with the 120 MHz APB1 timer.
   NEOPIXEL_TIMER_PERIOD_TICKS = 150,
@@ -54,6 +61,8 @@ static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
 static runtime_chirp_t buzzer_chirp;
+static display_link_state_t mainboard_link_state = DISPLAY_LINK_STATE_WAITING;
+static uint32_t last_mainboard_heartbeat_ms;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -459,7 +468,8 @@ static void initialize_clocks_for_display_board(void)
 
   // Enable EXMC so the LCD can be written through the memory-mapped bus.
   RCU_AHB1EN |= BIT(8);
-  RCU_APB1EN |= BIT(4); // TIMER5 for NeoPixel bit timing
+  RCU_APB1EN |= BIT(4) | // TIMER5 for NeoPixel bit timing
+                BIT(17); // USART1 for the RS232 link to the mainboard
   (void)RCU_APB2EN;
   (void)RCU_AHB1EN;
   (void)RCU_APB1EN;
@@ -469,6 +479,27 @@ static void initialize_clocks_for_display_board(void)
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
   interrupts_enable();
   knob_led_timer_init();
+}
+
+static void initialize_mainboard_serial_link(void)
+{
+  // The TFT35 E3 RS232 connector is a board-level 5-wire serial link to the
+  // mainboard. On the GD32F205 variant, that connector uses PA2/PA3 on
+  // USART1, with normal 3.3 V UART signalling behind BTT's connector label.
+  configure_gpio_pin_mode(GPIOA_BASE, MAINBOARD_SERIAL_TX_PIN, 0xBu);
+  configure_gpio_pin_mode(GPIOA_BASE, MAINBOARD_SERIAL_RX_PIN, 0x8u);
+  gpio_output_set(GPIOA_BASE, MAINBOARD_SERIAL_RX_PIN, true);
+
+  USART_CTL0(USART1_BASE) = 0;
+  USART_CTL1(USART1_BASE) = 0;
+  USART_CTL2(USART1_BASE) = 0;
+  USART_BAUD(USART1_BASE) = (APB1_PERIPHERAL_CLOCK_HZ + (MAINBOARD_SERIAL_BAUD / 2u)) /
+                            MAINBOARD_SERIAL_BAUD;
+
+  // Enable 8 data bits, no parity, one stop bit, transmitter, receiver, and
+  // the USART peripheral itself. Higher-level framing and buffering should live
+  // in shared communication code, not in the physical board HAL.
+  USART_CTL0(USART1_BASE) = BIT(13) | BIT(3) | BIT(2);
 }
 
 static void initialize_display_board_gpio(void)
@@ -505,6 +536,8 @@ static void initialize_display_board_gpio(void)
   gpio_output_set(GPIOA_BASE, ENCODER_A_PIN, true);
   gpio_output_set(GPIOC_BASE, ENCODER_B_PIN, true);
   gpio_output_set(GPIOC_BASE, ENCODER_BTN_PIN, true);
+
+  initialize_mainboard_serial_link();
 }
 
 static void configure_lcd_external_memory_bus_pin(uint32_t base, uint8_t pin)
@@ -782,7 +815,43 @@ static void initialize_lcd_controller(void)
   }
   delay_ms(20);
 
-  display_render_draw_home_screen(&lcd_surface);
+  display_render_draw_home_screen(&lcd_surface, mainboard_link_state);
+}
+
+static void set_mainboard_link_state(display_link_state_t next_link_state)
+{
+  if (mainboard_link_state == next_link_state)
+  {
+    return;
+  }
+
+  mainboard_link_state = next_link_state;
+  display_render_draw_home_link_state(&lcd_surface, mainboard_link_state);
+}
+
+static void service_mainboard_serial_link(void)
+{
+  for (uint8_t received_count = 0; received_count < MAINBOARD_SERIAL_RECEIVE_BYTES_PER_SERVICE;
+       received_count++)
+  {
+    if (!display_mainboard_serial_byte_available())
+    {
+      break;
+    }
+
+    const uint8_t value = display_mainboard_serial_read_byte();
+    if (value == MAINBOARD_SERIAL_HEARTBEAT_BYTE)
+    {
+      last_mainboard_heartbeat_ms = monotonic_milliseconds;
+      set_mainboard_link_state(DISPLAY_LINK_STATE_OK);
+    }
+  }
+
+  if ((uint32_t)(monotonic_milliseconds - last_mainboard_heartbeat_ms) >=
+      MAINBOARD_SERIAL_LINK_TIMEOUT_MS)
+  {
+    set_mainboard_link_state(DISPLAY_LINK_STATE_LOST);
+  }
 }
 
 static void buzzer_set_output(bool high)
@@ -891,6 +960,8 @@ void display_initialize_hardware(void)
   initialize_buzzer_chirp();
   chirp(1800, 60);
   delay_ms(80);
+  mainboard_link_state = DISPLAY_LINK_STATE_WAITING;
+  last_mainboard_heartbeat_ms = monotonic_milliseconds;
   initialize_lcd_controller();
 
   encoder_state = encoder_sample();
@@ -903,6 +974,7 @@ uint32_t display_get_monotonic_milliseconds(void)
 
 void display_run_background_tasks(void)
 {
+  service_mainboard_serial_link();
   (void)encoder_poll();
   touch_poll();
   backlight_check_idle_timeout();
@@ -917,4 +989,24 @@ void display_wait_for_scheduler_tick(void)
   }
 
   delay_ms(1);
+}
+
+bool display_mainboard_serial_byte_available(void)
+{
+  return (USART_STAT(USART1_BASE) & BIT(5)) != 0; // RBNE
+}
+
+uint8_t display_mainboard_serial_read_byte(void)
+{
+  return (uint8_t)USART_DATA(USART1_BASE);
+}
+
+bool display_mainboard_serial_transmit_ready(void)
+{
+  return (USART_STAT(USART1_BASE) & BIT(7)) != 0; // TBE
+}
+
+void display_mainboard_serial_write_byte(uint8_t value)
+{
+  USART_DATA(USART1_BASE) = value;
 }

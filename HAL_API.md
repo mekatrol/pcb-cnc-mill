@@ -50,8 +50,15 @@ The current shared mainboard entry point is `firmware/core/mainboard/main.c`.
 Required header:
 
 ```c
+#include <stdbool.h>
+#include <stdint.h>
+
 void mainboard_initialize_hardware(void);
 void mainboard_run_background_tasks(void);
+bool mainboard_display_serial_byte_available(void);
+uint8_t mainboard_display_serial_read_byte(void);
+bool mainboard_display_serial_transmit_ready(void);
+void mainboard_display_serial_write_byte(uint8_t value);
 ```
 
 ### `mainboard_initialize_hardware`
@@ -93,6 +100,31 @@ Timing:
 - Must not generate step pulses directly; precise step timing belongs in timer
   compare code fed by planner or step queues.
 
+### `mainboard_display_serial_*`
+
+Purpose:
+
+- Provide raw byte transport over the mainboard-to-standalone-display serial
+  link when the selected mainboard exposes one.
+- On the BTT SKR Mini E3 V3, this is the TFT header UART wired to the TFT35 E3
+  RS232 connector: `PA2` transmit and `PA3` receive through `USART2`, currently
+  initialized as `115200` baud, 8 data bits, no parity, and 1 stop bit.
+- The current SKR Mini E3 V3 skeleton sends a single heartbeat byte,
+  `0xA5`, from `mainboard_run_background_tasks()` as a link-liveness signal for
+  standalone display firmware.
+- Keep framing, checksums, command routing, buffering, retries, and parser state
+  in shared communication code above the board HAL.
+
+Timing:
+
+- `mainboard_display_serial_byte_available()` and
+  `mainboard_display_serial_transmit_ready()` must be non-blocking probes.
+- `mainboard_display_serial_read_byte()` may be called after a byte-available
+  probe reports true.
+- `mainboard_display_serial_write_byte()` may be called after a transmit-ready
+  probe reports true.
+- These methods must not busy-wait for link activity from scheduler callbacks.
+
 ## Display HAL
 
 The display HAL is the board support contract for display and pendant boards.
@@ -104,6 +136,7 @@ tree, scheduler instance, and local display firmware main loop.
 Required header:
 
 ```c
+#include <stdbool.h>
 #include <stdint.h>
 
 void display_initialize_hardware(void);
@@ -111,6 +144,10 @@ uint32_t display_get_monotonic_milliseconds(void);
 void display_run_background_tasks(void);
 void display_run_buzzer_tasks(void);
 void display_wait_for_scheduler_tick(void);
+bool display_mainboard_serial_byte_available(void);
+uint8_t display_mainboard_serial_read_byte(void);
+bool display_mainboard_serial_transmit_ready(void);
+void display_mainboard_serial_write_byte(uint8_t value);
 ```
 
 ### `display_initialize_hardware`
@@ -210,6 +247,32 @@ Timing:
 - Called once after each scheduler pass.
 - Should not sleep so long that input, display, communication, or feedback
   tasks miss their expected service latency.
+
+### `display_mainboard_serial_*`
+
+Purpose:
+
+- Provide raw byte transport over the standalone-display-to-mainboard serial
+  link when the selected display board exposes one.
+- On the BTT TFT35 E3 GD32 variant, this is the RS232 connector UART:
+  `PA2` transmit and `PA3` receive through `USART1`, currently initialized as
+  `115200` baud, 8 data bits, no parity, and 1 stop bit.
+- The current TFT35 E3 display firmware treats received heartbeat byte `0xA5`
+  as proof that the mainboard link is alive and updates the home-screen link
+  indicator.
+- Keep protocol parsing, screen state updates, command encoding, buffering,
+  timeouts, and recovery policy in shared display or communication code above
+  the board HAL.
+
+Timing:
+
+- `display_mainboard_serial_byte_available()` and
+  `display_mainboard_serial_transmit_ready()` must be non-blocking probes.
+- `display_mainboard_serial_read_byte()` may be called after a byte-available
+  probe reports true.
+- `display_mainboard_serial_write_byte()` may be called after a transmit-ready
+  probe reports true.
+- These methods must not busy-wait for link activity from scheduler callbacks.
 
 ## Mainboard Display Module
 

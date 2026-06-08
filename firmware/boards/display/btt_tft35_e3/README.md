@@ -123,6 +123,8 @@ V3.0 pin map. This matches the V3.0.1 board in use here:
 - Encoder enable: `PC6`
 - Touch controller: XPT2046 software SPI on `PE6` CS, `PE5` SCK, `PE4`
   MISO, `PE3` MOSI, and `PC13` pen interrupt
+- Mainboard serial link: RS232 connector UART on `PA2` transmit and `PA3`
+  receive, using `USART1` at `115200` baud, 8 data bits, no parity, 1 stop bit
 
 The display bring-up runs the GD32F205 at 120 MHz from the internal IRC8M/2
 PLL source. The external HXTAL pins overlap LCD data pins `PD0` and `PD1`, so
@@ -138,11 +140,17 @@ press. The first rendered screen is the shared large-TFT home screen with
 offline-safe placeholder machine state until the mainboard status link is
 implemented. Screen text and layout now live under `firmware/core/display/`;
 this board folder owns only the physical LCD bus, controller setup, touch,
-encoder, backlight, buzzer, and knob LED behavior. The LCD backlight and knob
-RGB LEDs turn on after reset; during
+encoder, backlight, buzzer, knob LED behavior, and the raw serial transport to
+the mainboard. The home screen has a top-right serial-link indicator: it starts
+as `LINK WAIT`, changes to `LINK OK` when heartbeat byte `0xA5` arrives from
+the mainboard, and changes to `LINK LOST` when no heartbeat is received for
+1.5 seconds. The serial HAL exposes non-blocking byte probes/read/write methods
+only; framing, buffering, command routing, and machine-status exchange still
+need a shared protocol layer. The LCD backlight and knob RGB LEDs turn on after
+reset; during
 normal operation the knob RGB LEDs cycle through a rainbow. The backlight and
 knob LEDs turn off after 30 seconds without a touch, encoder rotation, or
 encoder button press; any of those events turns them back on and restarts the
 idle timer. If no known LCD controller ID can be read, initialization stops, the
 knob RGB LED flashes red, and the buzzer emits a repeating error pulse. SD/USB
-media and serial behavior are still intentionally out of scope.
+media behavior is still intentionally out of scope.

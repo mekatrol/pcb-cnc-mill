@@ -46,6 +46,14 @@
 #define TIMER_PSC(base) MMIO32((base) + 0x28u)
 #define TIMER_CAR(base) MMIO32((base) + 0x2Cu)
 
+#define USART1_BASE (APB1PERIPH_BASE + 0x4400u)
+#define USART_STAT(base) MMIO32((base) + 0x00u)
+#define USART_DATA(base) MMIO32((base) + 0x04u)
+#define USART_BAUD(base) MMIO32((base) + 0x08u)
+#define USART_CTL0(base) MMIO32((base) + 0x0Cu)
+#define USART_CTL1(base) MMIO32((base) + 0x10u)
+#define USART_CTL2(base) MMIO32((base) + 0x14u)
+
 // External Memory Controller. On GD32F205 it is the peripheral
 // that drives the TFT LCD as a 16-bit 8080-style parallel memory device.
 #define EXMC_BASE 0xA0000000u

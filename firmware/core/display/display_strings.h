@@ -3,7 +3,9 @@
 
 extern const char display_string_product_name[];
 extern const char display_string_home_machine_state[];
-extern const char display_string_home_link_state[];
+extern const char display_string_home_link_waiting[];
+extern const char display_string_home_link_ok[];
+extern const char display_string_home_link_lost[];
 extern const char display_string_home_status_line[];
 extern const char display_string_home_machine_position[];
 extern const char display_string_home_work_position[];

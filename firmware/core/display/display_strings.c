@@ -2,7 +2,9 @@
 
 const char display_string_product_name[] = "PCB CNC MILL";
 const char display_string_home_machine_state[] = "OFFLINE";
-const char display_string_home_link_state[] = "LINK?";
+const char display_string_home_link_waiting[] = "LINK WAIT";
+const char display_string_home_link_ok[] = "LINK OK";
+const char display_string_home_link_lost[] = "LINK LOST";
 const char display_string_home_status_line[] = "WCS:G54  MM  ABS  SPINDLE:OFF  FEED:100%  E-STOP:READY";
 const char display_string_home_machine_position[] = "MPOS X 0.000  Y 0.000  Z 0.000";
 const char display_string_home_work_position[] = "WPOS G54 X 0.000  Y 0.000  Z 0.000";

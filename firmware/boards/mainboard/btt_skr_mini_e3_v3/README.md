@@ -88,6 +88,24 @@ make debug
 
 Then connect GDB with `debug.gdb`.
 
-This is only the bring-up base. Pin mapping, stepper timers, USB CDC, serial
-ports, heaters, fans, endstops, probe input, spindle IO, EEPROM, and board
-safety behavior still need board verification before use.
+## Current bring-up scope
+
+The board HAL initializes the TFT header serial link used by a standalone
+TFT35 E3 in touch-screen mode:
+
+- Connector: SKR Mini E3 V3 `TFT`
+- Peripheral: `USART2`
+- TX: `PA2`
+- RX: `PA3`
+- Format: `115200` baud, 8 data bits, no parity, 1 stop bit
+
+The HAL exposes non-blocking raw byte probes/read/write methods for the future
+mainboard-to-display protocol. The current skeleton sends heartbeat byte
+`0xA5` from the background loop when the TFT UART is ready, giving standalone
+display firmware a simple link-liveness signal. It does not yet implement
+command framing, status reporting, G-code forwarding, buffering, retries, or
+display state synchronization.
+
+This is only the bring-up base. Pin mapping, stepper timers, USB CDC, heaters,
+fans, endstops, probe input, spindle IO, EEPROM, and board safety behavior
+still need board verification before use.

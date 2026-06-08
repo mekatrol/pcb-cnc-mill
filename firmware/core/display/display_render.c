@@ -6,6 +6,10 @@ enum
 {
   LARGE_TFT_WIDTH_PIXELS = 480,
   LARGE_TFT_STATUS_HEIGHT_PIXELS = 64,
+  LARGE_TFT_LINK_STATUS_X_PIXELS = 356,
+  LARGE_TFT_LINK_STATUS_Y_PIXELS = 12,
+  LARGE_TFT_LINK_STATUS_WIDTH_PIXELS = 124,
+  LARGE_TFT_LINK_STATUS_HEIGHT_PIXELS = 28,
   LARGE_TFT_ACTION_ROW_TOP_PIXELS = 224,
   LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS = 48,
   LARGE_TFT_ACTION_COLUMN_WIDTH_PIXELS = 120,
@@ -38,7 +42,46 @@ static void draw_button_cell(const display_surface_t *surface, uint16_t column, 
                             background_color, 2);
 }
 
-void display_render_draw_home_screen(const display_surface_t *surface)
+static const char *home_link_state_text(display_link_state_t link_state)
+{
+  switch (link_state)
+  {
+  case DISPLAY_LINK_STATE_OK:
+    return display_string_home_link_ok;
+  case DISPLAY_LINK_STATE_LOST:
+    return display_string_home_link_lost;
+  case DISPLAY_LINK_STATE_WAITING:
+  default:
+    return display_string_home_link_waiting;
+  }
+}
+
+static uint16_t home_link_state_color(display_link_state_t link_state)
+{
+  switch (link_state)
+  {
+  case DISPLAY_LINK_STATE_OK:
+    return display_rgb565(94, 202, 112);
+  case DISPLAY_LINK_STATE_LOST:
+    return display_rgb565(210, 70, 64);
+  case DISPLAY_LINK_STATE_WAITING:
+  default:
+    return display_rgb565(232, 170, 42);
+  }
+}
+
+void display_render_draw_home_link_state(const display_surface_t *surface, display_link_state_t link_state)
+{
+  const uint16_t panel = display_rgb565(22, 30, 38);
+
+  surface->fill_rect(surface->context, LARGE_TFT_LINK_STATUS_X_PIXELS, LARGE_TFT_LINK_STATUS_Y_PIXELS,
+                     LARGE_TFT_LINK_STATUS_WIDTH_PIXELS, LARGE_TFT_LINK_STATUS_HEIGHT_PIXELS, panel);
+  display_surface_draw_text(surface, LARGE_TFT_LINK_STATUS_X_PIXELS, LARGE_TFT_LINK_STATUS_Y_PIXELS,
+                            home_link_state_text(link_state), home_link_state_color(link_state),
+                            panel, 2);
+}
+
+void display_render_draw_home_screen(const display_surface_t *surface, display_link_state_t link_state)
 {
   const uint16_t background = display_rgb565(10, 14, 18);
   const uint16_t panel = display_rgb565(22, 30, 38);
@@ -47,7 +90,6 @@ void display_render_draw_home_screen(const display_surface_t *surface)
   const uint16_t text = display_rgb565(232, 238, 232);
   const uint16_t muted = display_rgb565(150, 164, 168);
   const uint16_t warning = display_rgb565(232, 170, 42);
-  const uint16_t alarm = display_rgb565(210, 70, 64);
   const uint16_t action = display_rgb565(40, 56, 68);
   const uint16_t disabled_action = display_rgb565(34, 40, 46);
 
@@ -58,7 +100,7 @@ void display_render_draw_home_screen(const display_surface_t *surface)
 
   display_surface_draw_text(surface, 10, 12, display_string_product_name, text, panel, 2);
   display_surface_draw_text(surface, 228, 12, display_string_home_machine_state, warning, panel, 2);
-  display_surface_draw_text(surface, 396, 12, display_string_home_link_state, alarm, panel, 2);
+  display_render_draw_home_link_state(surface, link_state);
   display_surface_draw_text(surface, 10, 38, display_string_home_status_line, muted, panel, 1);
 
   display_surface_draw_text(surface, 18, 82, display_string_home_machine_position, text, background,
