@@ -1,0 +1,1 @@
+BOOTLOADER_UPDATE_BIN_NAME := firmware.bin

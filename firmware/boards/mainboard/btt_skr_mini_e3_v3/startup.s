@@ -67,6 +67,13 @@ g_pfnVectors:
 .section .text.Reset_Handler, "ax", %progbits
 .type Reset_Handler, %function
 Reset_Handler:
+  /* The BTT SD-card bootloader jumps to this app at 0x08002000. Point the
+     Vector Table Offset Register (VTOR) at the app vectors before any
+     interrupts can use the bootloader table. */
+  ldr r0, =0xE000ED08
+  ldr r1, =g_pfnVectors
+  str r1, [r0]
+
   ldr r0, =_sbss
   ldr r1, =_ebss
   movs r2, #0

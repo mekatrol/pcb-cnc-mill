@@ -25,7 +25,7 @@ OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
 STFLASH := st-flash
 
-FLASH_ADDR := 0x08000000
+FLASH_ADDR := 0x08003000
 
 CPUFLAGS := -mcpu=cortex-m3 -mthumb
 CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections

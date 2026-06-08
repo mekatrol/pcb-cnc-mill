@@ -11,6 +11,8 @@ Known controller variant on this board:
 - RAM: linked as 64 KiB for conservative direct-SWD bring-up; some BTT GD32
   firmware configs use 128 KiB, but this ST-Link setup reports 64 KiB
 - Debug and flash: ST-Link over SWD
+- Firmware app offset: `0x08003000`, leaving the factory BTT TFT35 SD-card
+  bootloader at the start of flash
 
 Build from this folder:
 
@@ -19,7 +21,18 @@ cd firmware/boards/display/btt_tft35_e3/build
 make
 ```
 
-Flash with ST-Link and OpenOCD:
+The build emits both the long project binary name and a BTT TFT35 bootloader
+update image:
+
+```text
+firmware/build/display/btt_tft35_e3/BIGTREE_GD_TFT35_V3.0_E3.27.x.bin
+```
+
+To update through the factory BTT display bootloader, format a microSD card as
+FAT32, copy `BIGTREE_GD_TFT35_V3.0_E3.27.x.bin` to the card root, insert it
+into the TFT35 E3, and reset or power-cycle the display.
+
+Flash with ST-Link only when doing bench bring-up or recovery:
 
 ```sh
 make flash
@@ -28,9 +41,9 @@ make flash
 The GD32F205 can identify to ST-Link tooling as `STM32F1xx_CL`. `make flash`
 uses `st-flash` instead of OpenOCD because this OpenOCD install can halt the
 core with the GD32 TAP ID, but its STM32F2 flash driver refuses the GD32 device
-ID. This bring-up image is linked and written at `0x08000000` for direct SWD
-boot. If the factory BTT bootloader is restored later, the app can be moved back
-to BTT's GD32 TFT35 application offset at `0x08003000`.
+ID. `make flash` writes the application at `0x08003000`. It does not
+intentionally erase or program the BTT display bootloader region at
+`0x08000000` through `0x08002fff`.
 
 Start an OpenOCD debug session:
 
@@ -84,5 +97,4 @@ knob LEDs turn off after 30 seconds without a touch, encoder rotation, or
 encoder button press; any of those events turns them back on and restarts the
 idle timer. If no known LCD controller ID can be read, initialization stops, the
 knob RGB LED flashes red, and the buzzer emits a repeating error pulse. SD/USB
-media, serial, and bootloader-offset builds are still intentionally out of
-scope.
+media and serial behavior are still intentionally out of scope.

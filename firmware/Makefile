@@ -68,6 +68,8 @@ DRIVER_DIRS     := $(foreach name,$(DRIVER_NAMES),drivers/$(name))
 MAINBOARD_DISPLAY_OBJ_SUFFIX := $(if $(MAINBOARD_DISPLAY_ENABLED),-with-$(MAINBOARD_DISPLAY_NAME),)
 OBJ_DIR         := build/$(BUILD_TARGET)/$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)
 
+-include $(BOARD_BLD_DIR)$(SEP)bootloader.mk
+
 # =========================
 # Outputs
 # =========================
@@ -75,6 +77,7 @@ TARGET  := pcb-cnc-mill-$(BUILD_TARGET)-$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUF
 OUT_ELF := $(OBJ_DIR)$(SEP)$(TARGET).elf
 OUT_MAP := $(OBJ_DIR)$(SEP)$(TARGET).map
 OUT_BIN := $(OBJ_DIR)$(SEP)$(TARGET).bin
+OUT_BOOTLOADER_UPDATE_BIN := $(if $(BOOTLOADER_UPDATE_BIN_NAME),$(OBJ_DIR)$(SEP)$(BOOTLOADER_UPDATE_BIN_NAME),)
 
 # =========================
 # Flags
@@ -116,10 +119,13 @@ OBJS   := $(A_OBJS) $(C_OBJS)
 # Default target
 # =========================
 .PHONY: all
-all: $(OUT_BIN)
+all: $(OUT_BIN) $(OUT_BOOTLOADER_UPDATE_BIN)
 	$(SIZE) $(OUT_ELF)
 
 $(OUT_BIN): $(OUT_ELF)
+	$(OBJCOPY) -O binary $< $@
+
+$(OUT_BOOTLOADER_UPDATE_BIN): $(OUT_ELF)
 	$(OBJCOPY) -O binary $< $@
 
 $(OUT_ELF): $(OBJS) $(LD_SCRIPT)
@@ -194,3 +200,4 @@ print-config:
 	@echo DRIVER_NAMES=$(DRIVER_NAMES)
 	@echo BOARD_DIR=$(BOARD_DIR)
 	@echo OUT_BIN=$(OUT_BIN)
+	@echo OUT_BOOTLOADER_UPDATE_BIN=$(OUT_BOOTLOADER_UPDATE_BIN)

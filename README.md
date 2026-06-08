@@ -144,6 +144,14 @@ make -C firmware mainboard \
   MAINBOARD_DISPLAY_NAME=btt_mini12864
 ```
 
+BTT bootloader-compatible boards also emit an SD-card update filename in the
+same build directory. For the default SKR Mini E3 V3 mainboard, copy
+`firmware/build/mainboard/btt_skr_mini_e3_v3/firmware.bin` to the mainboard SD
+card root. For the default GD32 TFT35 E3 display, copy
+`firmware/build/display/btt_tft35_e3/BIGTREE_GD_TFT35_V3.0_E3.27.x.bin` to the
+display SD card root. These images are linked above the factory bootloader
+regions so normal updates do not replace BTT's bootloader.
+
 Check the selected build settings with:
 
 ```sh
@@ -171,12 +179,14 @@ make -C firmware print-config \
   and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
   provides the monotonic millisecond clock used by the shared runtime
   scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
-  details stay in the board code. See [`HAL_API.md`](HAL_API.md) for the display HAL
+  details stay in the board code. The image is linked at the BTT display app
+  offset `0x08003000`. See [`HAL_API.md`](HAL_API.md) for the display HAL
   methods that the shared display entry point calls.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD
-  flash and debug.
+  flash and debug. The image is linked at the BTT mainboard app offset
+  `0x08002000`.
 - `firmware/boards/display_module/btt_mini12864/` - placeholder for a BTT
   Mini12864-style compact display connected to a mainboard expansion header.
   It is compiled into a mainboard firmware image with

@@ -41,6 +41,8 @@ OUT_ELF := $(OBJ_DIR)$(SEP)$(TARGET).elf
 OUT_MAP := $(OBJ_DIR)$(SEP)$(TARGET).map
 OUT_BIN := $(OBJ_DIR)$(SEP)$(TARGET).bin
 
+FLASH_ADDR := 0x08002000
+
 LDFLAGS := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(MAKEFILE_DIR)linker.ld
 
 .PHONY: all
@@ -65,7 +67,7 @@ $(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.s
 flash: all
 	@echo "[FLASH] Flashing binary with ST-Link"
 	openocd -f interface/stlink.cfg -f target/stm32g0x.cfg \
-		-c "debug_level 1; adapter speed 1800; program $(abspath $(OUT_BIN)) verify reset exit 0x08000000"
+		-c "debug_level 1; adapter speed 1800; program $(abspath $(OUT_BIN)) verify reset exit $(FLASH_ADDR)"
 
 .PHONY: debug
 debug: all
