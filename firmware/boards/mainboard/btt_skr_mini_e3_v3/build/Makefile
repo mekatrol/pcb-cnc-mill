@@ -14,17 +14,25 @@ endif
 BOARD_NAME ?= btt_skr_mini_e3_v3
 MAINBOARD_DISPLAY_NAME ?= none
 MAINBOARD_DISPLAY_SUFFIX := $(if $(filter none,$(MAINBOARD_DISPLAY_NAME)),,-with-$(MAINBOARD_DISPLAY_NAME))
-TARGET     := pcb-cnc-mill-mainboard-$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)
+FLASH_LAYOUT ?= bootloader
+FLASH_LAYOUT_SUFFIX := $(if $(filter direct,$(FLASH_LAYOUT)),-direct,)
+TARGET     := pcb-cnc-mill-mainboard-$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)$(FLASH_LAYOUT_SUFFIX)
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BOARD_DIR    := $(abspath $(MAKEFILE_DIR)..)
 ROOT_DIR     := $(abspath $(BOARD_DIR)../../../../..)
 FIRMWARE_DIR := $(ROOT_DIR)$(SEP)firmware
 OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)mainboard$(SEP)$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)
+OBJ_DIR      := $(OBJ_DIR)$(FLASH_LAYOUT_SUFFIX)
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
+OPENOCD := openocd
+STLINK_SERIAL ?=
+OPENOCD_STLINK_SERIAL_CMD := $(if $(STLINK_SERIAL),-c "adapter serial $(STLINK_SERIAL)",)
+BTT_BOOTLOADER_BIN := $(BOARD_DIR)$(SEP)bootloader$(SEP)btt-skr-mini-e3-v3.0-bootloader-region-0x2000.bin
+BTT_BOOTLOADER_ADDR := 0x08000000
 
 CPUFLAGS := -mcpu=cortex-m0plus -mthumb
 CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections
@@ -41,13 +49,17 @@ OUT_ELF := $(OBJ_DIR)$(SEP)$(TARGET).elf
 OUT_MAP := $(OBJ_DIR)$(SEP)$(TARGET).map
 OUT_BIN := $(OBJ_DIR)$(SEP)$(TARGET).bin
 
-FLASH_ADDR := 0x08002000
+ifeq ($(FLASH_LAYOUT),direct)
+  FLASH_ADDR := 0x08000000
+else
+  FLASH_ADDR := 0x08002000
+endif
 
 LDFLAGS := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(MAKEFILE_DIR)linker.ld
 
 .PHONY: all
 all:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) FLASH_LAYOUT=$(FLASH_LAYOUT)
 
 $(OUT_BIN): $(OUT_ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -66,13 +78,39 @@ $(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.s
 .PHONY: flash
 flash: all
 	@echo "[FLASH] Flashing binary with ST-Link"
-	openocd -f interface/stlink.cfg -f target/stm32g0x.cfg \
+	$(OPENOCD) -f interface/stlink.cfg $(OPENOCD_STLINK_SERIAL_CMD) -f target/stm32g0x.cfg \
 		-c "debug_level 1; adapter speed 1800; program $(abspath $(OUT_BIN)) verify reset exit $(FLASH_ADDR)"
+
+.PHONY: flash-reset
+flash-reset: all
+	@echo "[FLASH] Flashing binary with ST-Link under reset"
+	$(OPENOCD) -f interface/stlink.cfg $(OPENOCD_STLINK_SERIAL_CMD) -f target/stm32g0x.cfg \
+		-c "debug_level 1" \
+		-c "adapter speed 1800" \
+		-c "reset_config srst_only srst_nogate connect_assert_srst" \
+		-c "init" \
+		-c "reset halt" \
+		-c "program $(abspath $(OUT_BIN)) verify reset exit $(FLASH_ADDR)"
+
+.PHONY: flash-direct-reset
+flash-direct-reset:
+	"$(MAKE)" flash-reset FLASH_LAYOUT=direct
+
+.PHONY: flash-btt-bootloader
+flash-btt-bootloader:
+	@echo "[FLASH] Restoring BTT SKR Mini E3 V3 bootloader with ST-Link"
+	$(OPENOCD) -f interface/stlink.cfg $(OPENOCD_STLINK_SERIAL_CMD) -f target/stm32g0x.cfg \
+		-c "debug_level 1" \
+		-c "adapter speed 1800" \
+		-c "reset_config srst_only srst_nogate connect_assert_srst" \
+		-c "init" \
+		-c "reset halt" \
+		-c "program $(abspath $(BTT_BOOTLOADER_BIN)) verify reset exit $(BTT_BOOTLOADER_ADDR)"
 
 .PHONY: debug
 debug: all
 	@echo "[OPENOCD] Programming and halting"
-	openocd -f interface/stlink.cfg -f target/stm32g0x.cfg \
+	$(OPENOCD) -f interface/stlink.cfg $(OPENOCD_STLINK_SERIAL_CMD) -f target/stm32g0x.cfg \
 		-c "debug_level 1" \
 		-c "adapter speed 1800" \
 		-c "init" \
@@ -82,4 +120,4 @@ debug: all
 
 .PHONY: clean
 clean:
-	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME)
+	"$(MAKE)" -C "$(FIRMWARE_DIR)" clean BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) FLASH_LAYOUT=$(FLASH_LAYOUT)

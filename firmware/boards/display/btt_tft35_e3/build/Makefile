@@ -25,7 +25,11 @@ OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)display$(SEP)$(BOARD_N
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
+OPENOCD := openocd
 STFLASH := st-flash
+STLINK_SERIAL ?=
+STFLASH_SERIAL_ARG := $(if $(STLINK_SERIAL),--serial $(STLINK_SERIAL),)
+OPENOCD_STLINK_SERIAL_CMD := $(if $(STLINK_SERIAL),-c "adapter serial $(STLINK_SERIAL)",)
 BTT_BOOTLOADER_BIN := $(BOARD_DIR)$(SEP)bootloader$(SEP)btt-gd-tft35-v3.0.1-bootloader-region-0x3000.bin
 BTT_BOOTLOADER_ADDR := 0x08000000
 
@@ -73,11 +77,11 @@ $(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.s
 .PHONY: flash
 flash: all
 	@echo "[FLASH] Flashing binary with ST-Link"
-	$(STFLASH) --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
+	$(STFLASH) $(STFLASH_SERIAL_ARG) --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
 
 flash-reset: all
 	@echo "[FLASH] Flashing binary with ST-Link"
-	$(STFLASH) --connect-under-reset --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
+	$(STFLASH) $(STFLASH_SERIAL_ARG) --connect-under-reset --reset write $(abspath $(OUT_BIN)) $(FLASH_ADDR)
 
 .PHONY: flash-direct-reset
 flash-direct-reset:
@@ -86,12 +90,12 @@ flash-direct-reset:
 .PHONY: flash-btt-bootloader
 flash-btt-bootloader:
 	@echo "[FLASH] Restoring BTT GD TFT35 bootloader with ST-Link"
-	$(STFLASH) --connect-under-reset --reset write $(abspath $(BTT_BOOTLOADER_BIN)) $(BTT_BOOTLOADER_ADDR)
+	$(STFLASH) $(STFLASH_SERIAL_ARG) --connect-under-reset --reset write $(abspath $(BTT_BOOTLOADER_BIN)) $(BTT_BOOTLOADER_ADDR)
 
 .PHONY: debug
 debug: all
 	@echo "[OPENOCD] Starting debug session"
-	openocd -f interface/stlink.cfg -c "set CPUTAPID 0x1ba01477" -f target/stm32f2x.cfg \
+	$(OPENOCD) -f interface/stlink.cfg $(OPENOCD_STLINK_SERIAL_CMD) -c "set CPUTAPID 0x1ba01477" -f target/stm32f2x.cfg \
 		-c "debug_level 1" \
 		-c "adapter speed 1800" \
 		-c "init" \

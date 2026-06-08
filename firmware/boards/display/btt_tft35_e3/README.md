@@ -38,6 +38,16 @@ Flash with ST-Link only when doing bench bring-up or recovery:
 make flash
 ```
 
+When more than one ST-Link is attached, select the display probe explicitly:
+
+```sh
+make flash-reset STLINK_SERIAL=37FF71064E57343655651343
+```
+
+On the current bench setup this display probe reports as `STM32F1xx_CL` because
+the GD32F205 identifies through ST-Link tooling like an STM32F1 connectivity
+line device.
+
 The GD32F205 can identify to ST-Link tooling as `STM32F1xx_CL`. `make flash`
 uses `st-flash` instead of OpenOCD because this OpenOCD install can halt the
 core with the GD32 TAP ID, but its STM32F2 flash driver refuses the GD32 device

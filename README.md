@@ -157,6 +157,19 @@ card root. For the default GD32 TFT35 E3 display, copy
 display SD card root. These images are linked above the factory bootloader
 regions so normal updates do not replace BTT's bootloader.
 
+When more than one ST-Link is attached, pass the desired probe serial with
+`STLINK_SERIAL=<serial>`. With the probes currently used on this bench, the
+GD32 TFT35 E3 display reports as `STM32F1xx_CL` on serial
+`37FF71064E57343655651343`, and the SKR Mini E3 V3 reports as
+`STM32G0Bx_G0Cx` on serial `37FF71064E573436EDA61343`:
+
+```sh
+make -C firmware/boards/display/btt_tft35_e3/build flash-reset \
+  STLINK_SERIAL=37FF71064E57343655651343
+make -C firmware/boards/mainboard/btt_skr_mini_e3_v3/build flash-reset \
+  STLINK_SERIAL=37FF71064E573436EDA61343
+```
+
 For the default GD32 TFT35 E3 display SD-card update flow, build the display
 firmware, find the mounted card, copy the BTT bootloader update file to the
 card root, flush writes, and unmount it before removing the card. Replace
@@ -175,16 +188,33 @@ so the BTT bootloader can burn the update image.
 If a board has previously been direct-flashed and no longer has a working BTT
 bootloader at the start of flash, either keep using a direct-SWD recovery image
 or restore the copied BTT bootloader. The direct-SWD image links the app at
-`0x08000000`, overwrites the bootloader region, and flashes under reset:
+`0x08000000`, overwrites the bootloader region, and flashes under reset. For
+the default SKR Mini E3 V3 mainboard:
+
+```sh
+make -C firmware/boards/mainboard/btt_skr_mini_e3_v3/build flash-direct-reset
+```
+
+For the default GD32 TFT35 E3 display:
 
 ```sh
 make -C firmware/boards/display/btt_tft35_e3/build flash-direct-reset
 ```
 
-To restore BTT SD-card update behavior, burn the real BTT GD TFT35 bootloader
-region included in this project, then burn this project's display firmware at
-the BTT application offset. The restore target uses only the first 12 KiB of
-BTT's full 256 KiB flash image so it does not write into the app region:
+To restore BTT SD-card update behavior, burn the real BTT bootloader region
+included in this project, then burn this project's normal firmware at the BTT
+application offset. For the default SKR Mini E3 V3 mainboard, the restore
+target uses an 8 KiB bootloader-region image so it does not write into the app
+region:
+
+```sh
+make -C firmware/boards/mainboard/btt_skr_mini_e3_v3/build flash-btt-bootloader
+make -C firmware/boards/mainboard/btt_skr_mini_e3_v3/build flash-reset
+```
+
+For the default GD32 TFT35 E3 display, the restore target uses only the first
+12 KiB of BTT's full 256 KiB flash image so it does not write into the app
+region:
 
 ```sh
 make -C firmware/boards/display/btt_tft35_e3/build flash-btt-bootloader
@@ -230,7 +260,10 @@ make -C firmware print-config \
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD
   flash and debug. The image is linked at the BTT mainboard app offset
-  `0x08002000`.
+  `0x08002000` by default, or at `0x08000000` with `FLASH_LAYOUT=direct` for
+  SWD recovery without a bootloader. The copied BTT SKR Mini E3 V3 bootloader
+  is stored under the board's `bootloader/` directory and can be restored with
+  the board Makefile.
 - `firmware/boards/display_module/btt_mini12864/` - placeholder for a BTT
   Mini12864-style compact display connected to a mainboard expansion header.
   It is compiled into a mainboard firmware image with
