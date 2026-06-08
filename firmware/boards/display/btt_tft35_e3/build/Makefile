@@ -26,6 +26,8 @@ CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
 SIZE    := arm-none-eabi-size
 STFLASH := st-flash
+BTT_BOOTLOADER_BIN := $(BOARD_DIR)$(SEP)bootloader$(SEP)btt-gd-tft35-v3.0.1-bootloader-region-0x3000.bin
+BTT_BOOTLOADER_ADDR := 0x08000000
 
 ifeq ($(FLASH_LAYOUT),direct)
   FLASH_ADDR := 0x08000000
@@ -80,6 +82,11 @@ flash-reset: all
 .PHONY: flash-direct-reset
 flash-direct-reset:
 	"$(MAKE)" flash-reset FLASH_LAYOUT=direct
+
+.PHONY: flash-btt-bootloader
+flash-btt-bootloader:
+	@echo "[FLASH] Restoring BTT GD TFT35 bootloader with ST-Link"
+	$(STFLASH) --connect-under-reset --reset write $(abspath $(BTT_BOOTLOADER_BIN)) $(BTT_BOOTLOADER_ADDR)
 
 .PHONY: debug
 debug: all

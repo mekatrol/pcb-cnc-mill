@@ -43,18 +43,41 @@ uses `st-flash` instead of OpenOCD because this OpenOCD install can halt the
 core with the GD32 TAP ID, but its STM32F2 flash driver refuses the GD32 device
 ID. `make flash` writes the application at `0x08003000`. It does not
 intentionally erase or program the BTT display bootloader region at
-`0x08000000` through `0x08002fff`.
+`0x08000000` through `0x08002fff`. The app startup stops any inherited SysTick
+configuration and rebuilds the system clock from IRC8M before enabling the
+project tick, so direct-SWD and BTT-bootloader launches use the same runtime
+clock setup.
 
 If the display was previously direct-flashed at `0x08000000`, the BTT
-bootloader may no longer be present to jump to the app at `0x08003000`. In that
-case use the direct-SWD recovery layout:
+bootloader may no longer be present to jump to the app at `0x08003000`.
+For app-only bench recovery, use the direct-SWD recovery layout:
 
 ```sh
 make flash-direct-reset
 ```
 
 This builds `firmware/build/display/btt_tft35_e3-direct/` and writes the app at
-`0x08000000`. Use it for bench recovery, not for SD-card updates.
+`0x08000000`. It overwrites the BTT bootloader region, so use it for bench
+recovery, not for SD-card updates.
+
+To restore BTT SD-card update behavior, first burn the copied BTT GD TFT35
+bootloader region at `0x08000000`. The upstream BTT file is a full 256 KiB
+flash image, so this target intentionally flashes only the first 12 KiB
+bootloader region and does not overwrite the app at `0x08003000`:
+
+```sh
+make flash-btt-bootloader
+```
+
+Then burn this project's normal display firmware at the BTT app offset
+`0x08003000`:
+
+```sh
+make flash-reset
+```
+
+After the bootloader is restored, SD-card updates can also use
+`firmware/build/display/btt_tft35_e3/BIGTREE_GD_TFT35_V3.0_E3.27.x.bin`.
 
 Start an OpenOCD debug session:
 

@@ -2,7 +2,7 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = APP_FLASH_ORIGIN, LENGTH = APP_FLASH_LENGTH
+  FLASH (rx) : ORIGIN = IMAGE_FLASH_ORIGIN, LENGTH = IMAGE_FLASH_LENGTH
   RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 144K
 }
 
@@ -10,7 +10,7 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);
 
 SECTIONS
 {
-  .isr_vector : {
+  .isr_vector APP_FLASH_ORIGIN : {
     . = ALIGN(4);
     KEEP(*(.isr_vector))
   } > FLASH

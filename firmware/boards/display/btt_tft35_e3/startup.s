@@ -38,12 +38,23 @@ g_pfnVectors:
 .section .text.Reset_Handler, "ax", %progbits
 .type Reset_Handler, %function
 Reset_Handler:
+  cpsid i
+
   /* Point the Vector Table Offset Register (VTOR) at the active app vectors.
      Bootloader builds run above the factory BTT bootloader, while direct-SWD
      recovery builds run from the start of internal flash. */
   ldr r0, =0xE000ED08
   ldr r1, =g_pfnVectors
   str r1, [r0]
+
+  /* A bootloader may leave SysTick running against its own vector table and
+     clock assumptions. Stop it before clearing .bss; the board HAL starts the
+     project tick after clocks and vectors are owned by this app. */
+  ldr r0, =0xE000E010
+  movs r1, #0
+  str r1, [r0]
+  str r1, [r0, #4]
+  str r1, [r0, #8]
 
   ldr r0, =_sbss
   ldr r1, =_ebss

@@ -153,12 +153,22 @@ display SD card root. These images are linked above the factory bootloader
 regions so normal updates do not replace BTT's bootloader.
 
 If a board has previously been direct-flashed and no longer has a working BTT
-bootloader at the start of flash, build a direct-SWD recovery image instead.
-For the default TFT35 E3 display this links the app at `0x08000000` and flashes
-it under reset:
+bootloader at the start of flash, either keep using a direct-SWD recovery image
+or restore the copied BTT bootloader. The direct-SWD image links the app at
+`0x08000000`, overwrites the bootloader region, and flashes under reset:
 
 ```sh
 make -C firmware/boards/display/btt_tft35_e3/build flash-direct-reset
+```
+
+To restore BTT SD-card update behavior, burn the real BTT GD TFT35 bootloader
+region included in this project, then burn this project's display firmware at
+the BTT application offset. The restore target uses only the first 12 KiB of
+BTT's full 256 KiB flash image so it does not write into the app region:
+
+```sh
+make -C firmware/boards/display/btt_tft35_e3/build flash-btt-bootloader
+make -C firmware/boards/display/btt_tft35_e3/build flash-reset
 ```
 
 Check the selected build settings with:
@@ -191,9 +201,10 @@ make -C firmware print-config \
   scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
   details stay in the board code. The image is linked at the BTT display app
   offset `0x08003000` by default, or at `0x08000000` with
-  `FLASH_LAYOUT=direct` for SWD recovery without a bootloader. See
-  [`HAL_API.md`](HAL_API.md) for the display HAL methods that the shared
-  display entry point calls.
+  `FLASH_LAYOUT=direct` for SWD recovery without a bootloader. The copied BTT
+  GD TFT35 bootloader is stored under the board's `bootloader/` directory and
+  can be restored with the board Makefile. See [`HAL_API.md`](HAL_API.md) for
+  the display HAL methods that the shared display entry point calls.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
   bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
   code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD

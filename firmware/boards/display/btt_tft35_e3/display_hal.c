@@ -407,6 +407,24 @@ static void knob_led_show_error_forever(void)
 
 static void configure_system_clock_120mhz(void)
 {
+  // A bootloader may jump here with the PLL already driving SYSCLK. Move back
+  // to the internal IRC8M oscillator and stop the PLL before changing its
+  // source or multiplier; those fields are not safe to edit while PLL is on.
+  RCU_CTL |= BIT(0); // IRC8MEN
+  while ((RCU_CTL & BIT(1)) == 0) // IRC8MSTB
+  {
+  }
+
+  RCU_CFG0 &= ~0x3u; // SCS = IRC8M
+  while ((RCU_CFG0 & (0x3u << 2)) != 0) // SCSS = IRC8M
+  {
+  }
+
+  RCU_CTL &= ~BIT(24); // PLLEN
+  while ((RCU_CTL & BIT(25)) != 0) // PLLSTB
+  {
+  }
+
   FMC_WS = (FMC_WS & ~0x7u) | 0x2u;
 
   // AHB = SYSCLK, APB2 = AHB, APB1 = AHB / 2. This is the same 120 MHz
@@ -449,6 +467,7 @@ static void initialize_clocks_for_display_board(void)
   SYST_RVR = SYSTICK_RELOAD_TICKS - 1u;
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
+  interrupts_enable();
   knob_led_timer_init();
 }
 
