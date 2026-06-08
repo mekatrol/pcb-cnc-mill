@@ -124,11 +124,12 @@ BIGTREETECH TFT35 V3.0 firmware, runs the matching LCD initialization sequence,
 hands a 480x320 drawing surface to the shared core display renderer, polls the
 encoder and button, polls the touch controller, and queues a low-priority
 scheduler chirp of the sounder once per debounced encoder or touch button
-press. Rotating the encoder moves the top RGB color strip in either direction.
-Screen text and layout now live under `firmware/core/display/`; this board
-folder owns only the physical LCD bus, controller setup, touch, encoder,
-backlight, buzzer, and knob LED behavior. The LCD backlight and knob RGB LEDs
-turn on after reset; during
+press. The first rendered screen is the shared large-TFT home screen with
+offline-safe placeholder machine state until the mainboard status link is
+implemented. Screen text and layout now live under `firmware/core/display/`;
+this board folder owns only the physical LCD bus, controller setup, touch,
+encoder, backlight, buzzer, and knob LED behavior. The LCD backlight and knob
+RGB LEDs turn on after reset; during
 normal operation the knob RGB LEDs cycle through a rainbow. The backlight and
 knob LEDs turn off after 30 seconds without a touch, encoder rotation, or
 encoder button press; any of those events turns them back on and restarts the

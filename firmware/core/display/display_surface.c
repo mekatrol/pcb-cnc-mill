@@ -42,6 +42,9 @@ static const uint8_t *font5x7(char ch)
       {0x61, 0x51, 0x49, 0x45, 0x43}, // Z
       {0x00, 0x36, 0x36, 0x00, 0x00}, // :
       {0x08, 0x08, 0x08, 0x08, 0x08}, // -
+      {0x00, 0x60, 0x60, 0x00, 0x00}, // .
+      {0x63, 0x13, 0x08, 0x64, 0x63}, // %
+      {0x02, 0x01, 0x51, 0x09, 0x06}, // ?
   };
 
   if (ch >= 'a' && ch <= 'z')
@@ -67,6 +70,18 @@ static const uint8_t *font5x7(char ch)
   if (ch == '-')
   {
     return glyphs[38];
+  }
+  if (ch == '.')
+  {
+    return glyphs[39];
+  }
+  if (ch == '%')
+  {
+    return glyphs[40];
+  }
+  if (ch == '?')
+  {
+    return glyphs[41];
   }
   return glyphs[0];
 }

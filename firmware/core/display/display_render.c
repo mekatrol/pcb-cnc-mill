@@ -2,80 +2,85 @@
 
 #include "display_strings.h"
 
-static void draw_large_tft_color_bars(display_render_context_t *render_context,
-                                      const display_surface_t *surface)
+enum
 {
-  const uint16_t colors[] = {
-      display_rgb565(210, 48, 48),
-      display_rgb565(48, 180, 90),
-      display_rgb565(48, 96, 220),
-      display_rgb565(255, 190, 48),
-      display_rgb565(180, 72, 220),
-      display_rgb565(40, 210, 210),
-  };
+  LARGE_TFT_WIDTH_PIXELS = 480,
+  LARGE_TFT_STATUS_HEIGHT_PIXELS = 64,
+  LARGE_TFT_ACTION_ROW_TOP_PIXELS = 224,
+  LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS = 48,
+  LARGE_TFT_ACTION_COLUMN_WIDTH_PIXELS = 120,
+};
 
-  const uint16_t segment_width = (uint16_t)(surface->width_pixels / 6u);
-  for (uint8_t segment = 0; segment < 6; segment++)
-  {
-    const uint8_t color_index = (uint8_t)((segment + render_context->color_bar_rotation) % 6u);
-    surface->fill_rect(surface->context, (uint16_t)(segment * segment_width), 0, segment_width,
-                       24, colors[color_index]);
-  }
+static void draw_horizontal_line(const display_surface_t *surface, uint16_t y, uint16_t color)
+{
+  surface->fill_rect(surface->context, 0, y, surface->width_pixels, 2, color);
 }
 
-void display_render_draw_touch_button(display_render_context_t *render_context,
-                                      const display_surface_t *surface, bool pressed)
+static void draw_vertical_line(const display_surface_t *surface, uint16_t x, uint16_t y,
+                               uint16_t height, uint16_t color)
 {
-  const uint16_t fill = pressed ? display_rgb565(64, 210, 230) : display_rgb565(255, 190, 48);
-  const uint16_t panel =
-      pressed ? display_rgb565(96, 235, 255) : display_rgb565(255, 205, 82);
-  const uint16_t text = display_rgb565(12, 18, 28);
-
-  render_context->touch_button_pressed = pressed;
-  surface->fill_rect(surface->context, 98, 214, 284, 58, fill);
-  surface->fill_rect(surface->context, 102, 218, 276, 50, panel);
-  display_surface_draw_text(surface, 150, 232, display_string_touch_chirp_action, text, panel, 2);
+  surface->fill_rect(surface->context, x, y, 2, height, color);
 }
 
-void display_render_draw_boot_screen(display_render_context_t *render_context,
-                                     const display_surface_t *surface)
+static void draw_button_cell(const display_surface_t *surface, uint16_t column, uint16_t row,
+                             const char *label, uint16_t text_color, uint16_t background_color,
+                             uint16_t border_color)
 {
-  const uint16_t background = display_rgb565(12, 18, 28);
-  const uint16_t white = display_rgb565(255, 255, 255);
-  const uint16_t amber = display_rgb565(255, 190, 48);
-  const uint16_t cyan = display_rgb565(64, 210, 230);
+  const uint16_t x = (uint16_t)(column * LARGE_TFT_ACTION_COLUMN_WIDTH_PIXELS);
+  const uint16_t y =
+      (uint16_t)(LARGE_TFT_ACTION_ROW_TOP_PIXELS + row * LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS);
 
-  render_context->color_bar_rotation = 0;
+  surface->fill_rect(surface->context, x, y, LARGE_TFT_ACTION_COLUMN_WIDTH_PIXELS,
+                     LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS, background_color);
+  draw_vertical_line(surface, x, y, LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS, border_color);
+  draw_horizontal_line(surface, y, border_color);
+  display_surface_draw_text(surface, (uint16_t)(x + 14u), (uint16_t)(y + 16u), label, text_color,
+                            background_color, 2);
+}
+
+void display_render_draw_home_screen(const display_surface_t *surface)
+{
+  const uint16_t background = display_rgb565(10, 14, 18);
+  const uint16_t panel = display_rgb565(22, 30, 38);
+  const uint16_t panel_alt = display_rgb565(30, 38, 46);
+  const uint16_t border = display_rgb565(96, 120, 132);
+  const uint16_t text = display_rgb565(232, 238, 232);
+  const uint16_t muted = display_rgb565(150, 164, 168);
+  const uint16_t warning = display_rgb565(232, 170, 42);
+  const uint16_t alarm = display_rgb565(210, 70, 64);
+  const uint16_t action = display_rgb565(40, 56, 68);
+  const uint16_t disabled_action = display_rgb565(34, 40, 46);
+
   surface->fill(surface->context, background);
-  draw_large_tft_color_bars(render_context, surface);
-  surface->fill_rect(surface->context, 0, 296, surface->width_pixels, 24, amber);
+  surface->fill_rect(surface->context, 0, 0, surface->width_pixels, LARGE_TFT_STATUS_HEIGHT_PIXELS,
+                     panel);
+  draw_horizontal_line(surface, 62, border);
 
-  display_surface_draw_text(surface, 54, 26, display_string_brand_name, white, background, 4);
-  display_surface_draw_text(surface, 54, 70, display_string_product_name, white, background, 4);
-  display_surface_draw_text(surface, 84, 128, display_string_large_tft_profile_name, cyan,
-                            background, 3);
-  display_surface_draw_text(surface, 72, 174, display_string_encoder_rgb_hint, amber, background,
+  display_surface_draw_text(surface, 10, 12, display_string_product_name, text, panel, 2);
+  display_surface_draw_text(surface, 228, 12, display_string_home_machine_state, warning, panel, 2);
+  display_surface_draw_text(surface, 396, 12, display_string_home_link_state, alarm, panel, 2);
+  display_surface_draw_text(surface, 10, 38, display_string_home_status_line, muted, panel, 1);
+
+  display_surface_draw_text(surface, 18, 82, display_string_home_machine_position, text, background,
                             2);
-  display_render_draw_touch_button(render_context, surface, false);
-  display_surface_draw_text(surface, 92, 300, display_string_encoder_chirp_hint, background, amber,
+  display_surface_draw_text(surface, 18, 118, display_string_home_work_position, text, background,
                             2);
-}
+  display_surface_draw_text(surface, 18, 164, display_string_home_job_status, muted, background, 1);
+  display_surface_draw_text(surface, 18, 188, display_string_home_limits_status, muted, background,
+                            1);
 
-void display_render_rotate_color_bars(display_render_context_t *render_context,
-                                      const display_surface_t *surface, int8_t delta)
-{
-  if (delta > 0)
-  {
-    render_context->color_bar_rotation = (uint8_t)((render_context->color_bar_rotation + 1u) % 6u);
-  }
-  else if (delta < 0)
-  {
-    render_context->color_bar_rotation = (uint8_t)((render_context->color_bar_rotation + 5u) % 6u);
-  }
-  else
-  {
-    return;
-  }
+  draw_horizontal_line(surface, 222, border);
+  draw_button_cell(surface, 0, 0, display_string_home_action_home, muted, disabled_action, border);
+  draw_button_cell(surface, 1, 0, display_string_home_action_motion, muted, disabled_action, border);
+  draw_button_cell(surface, 2, 0, display_string_home_action_spindle, muted, disabled_action,
+                   border);
+  draw_button_cell(surface, 3, 0, display_string_home_action_probe, muted, disabled_action, border);
+  draw_button_cell(surface, 0, 1, display_string_home_action_job, muted, disabled_action, border);
+  draw_button_cell(surface, 1, 1, display_string_home_action_coordinates, text, action, border);
+  draw_button_cell(surface, 2, 1, display_string_home_action_settings, text, action, border);
+  draw_button_cell(surface, 3, 1, display_string_home_action_safety, text, panel_alt, border);
 
-  draw_large_tft_color_bars(render_context, surface);
+  draw_vertical_line(surface, LARGE_TFT_WIDTH_PIXELS - 2u, LARGE_TFT_ACTION_ROW_TOP_PIXELS,
+                     (uint16_t)(2u * LARGE_TFT_ACTION_ROW_HEIGHT_PIXELS), border);
+  draw_horizontal_line(surface, 318, border);
 }

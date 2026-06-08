@@ -54,7 +54,6 @@ static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
 static runtime_chirp_t buzzer_chirp;
-static display_render_context_t display_render_context;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -783,7 +782,7 @@ static void initialize_lcd_controller(void)
   }
   delay_ms(20);
 
-  display_render_draw_boot_screen(&display_render_context, &lcd_surface);
+  display_render_draw_home_screen(&lcd_surface);
 }
 
 static void buzzer_set_output(bool high)
@@ -876,14 +875,12 @@ static void touch_poll(void)
     {
       touch_reported_pressed = true;
       record_activity();
-      display_render_draw_touch_button(&display_render_context, &lcd_surface, true);
       chirp(2200, 45);
     }
   }
   else if (touch_reported_pressed)
   {
     touch_reported_pressed = false;
-    display_render_draw_touch_button(&display_render_context, &lcd_surface, false);
   }
 }
 
@@ -906,8 +903,7 @@ uint32_t display_get_monotonic_milliseconds(void)
 
 void display_run_background_tasks(void)
 {
-  const int8_t encoder_delta = encoder_poll();
-  display_render_rotate_color_bars(&display_render_context, &lcd_surface, encoder_delta);
+  (void)encoder_poll();
   touch_poll();
   backlight_check_idle_timeout();
   knob_led_update_rainbow();
