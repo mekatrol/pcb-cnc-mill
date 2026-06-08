@@ -1318,12 +1318,21 @@ controls visible.
 
 - Shared display code should own the menu state machine, dirty regions, field
   editing, and command generation.
+- Shared display rendering code should own screen composition for each layout
+  profile. Boards with the same resolution and profile should reuse the same
+  text, dimensions, color choices, and widget layout instead of carrying copies
+  in board HAL files.
+- Shared user-facing strings should live in dedicated constant string tables,
+  for example `firmware/core/display/display_strings.c`, so targets that place
+  `const` data in string or read-only memory can keep display text separate
+  from executable code.
 - Shared display code should expose layout-independent screens and actions.
   Board or display-profile code should choose whether a screen is rendered as a
   large touch page, compact 128x64 page, or another future profile.
 - Standalone display board HAL code should own its display-board clock setup,
-  LCD controller setup, physical drawing primitives, touch or encoder sampling,
-  backlight, buzzer, local LEDs, and communication link to the mainboard.
+  LCD controller setup, physical drawing primitives or pixel-transfer
+  callbacks, touch or encoder sampling, backlight, buzzer, local LEDs, and
+  communication link to the mainboard.
 - Mainboard-attached display module code should own only panel-local hardware
   such as compact LCD pins, encoder inputs, click buttons, backlight, sounder,
   and LEDs. It must not own machine state, motion validation, mainboard clocks,

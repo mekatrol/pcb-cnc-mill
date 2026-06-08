@@ -35,6 +35,11 @@ details.
 - `firmware/core/display/main.c` - shared display firmware entry point. It
   calls the selected display board HAL instead of owning LCD, touch, or encoder
   pins directly. It should only wire startup, runtime setup, and the main loop.
+- `firmware/core/display/display_render.*`, `display_surface.*`, and
+  `display_strings.*` - shared display presentation code. Layout, text drawing,
+  and common UI strings live here so boards with the same display profile can
+  reuse the same screen rendering while keeping constant strings in read-only
+  data sections where the target processor/linker support that separation.
 - `firmware/core/display/mainboard_display_module.h` - shared contract for a
   display panel compiled into a mainboard firmware image. Use this for panels
   such as a Mini12864 connected to a mainboard expansion header, not for
@@ -214,8 +219,9 @@ make -C firmware print-config \
   and Makefile targets for ST-Link/OpenOCD flash and debug. The board SysTick
   provides the monotonic millisecond clock used by the shared runtime
   scheduler. LCD, touch, encoder, backlight, buzzer, and knob LED hardware
-  details stay in the board code. The image is linked at the BTT display app
-  offset `0x08003000` by default, or at `0x08000000` with
+  details stay in the board code; common screen rendering and display strings
+  are supplied by `firmware/core/display/`. The image is linked at the BTT
+  display app offset `0x08003000` by default, or at `0x08000000` with
   `FLASH_LAYOUT=direct` for SWD recovery without a bootloader. The copied BTT
   GD TFT35 bootloader is stored under the board's `bootloader/` directory and
   can be restored with the board Makefile. See [`HAL_API.md`](HAL_API.md) for

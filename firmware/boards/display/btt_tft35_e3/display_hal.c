@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "display_hal.h"
+#include "display_render.h"
 #include "registers.h"
 #include "runtime/chirp.h"
 
@@ -47,13 +48,13 @@ static uint8_t encoder_state;
 static uint8_t button_history = 0xFFu;
 static bool button_reported_pressed;
 static bool touch_reported_pressed;
-static uint8_t color_bar_rotation;
 static uint32_t last_activity_ms;
 static uint32_t next_knob_led_update_ms;
 static bool backlight_enabled;
 static bool knob_led_enabled;
 static uint8_t knob_led_rainbow_phase;
 static runtime_chirp_t buzzer_chirp;
+static display_render_context_t display_render_context;
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -621,13 +622,6 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
   lcd_write_command(0x2Cu);
 }
 
-static uint16_t rgb565(uint8_t red, uint8_t green, uint8_t blue)
-{
-  return (uint16_t)(((uint16_t)(red & 0xF8u) << 8) |
-                    ((uint16_t)(green & 0xFCu) << 3) |
-                    ((uint16_t)blue >> 3));
-}
-
 static void lcd_fill(uint16_t color)
 {
   lcd_set_window(0, 0, 479, 319);
@@ -646,149 +640,26 @@ static void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
   }
 }
 
-static const uint8_t *font5x7(char ch)
+static void lcd_surface_fill(void *context, uint16_t color)
 {
-  static const uint8_t glyphs[][5] = {
-      {0x00, 0x00, 0x00, 0x00, 0x00}, // space
-      {0x3E, 0x51, 0x49, 0x45, 0x3E}, // 0
-      {0x00, 0x42, 0x7F, 0x40, 0x00}, // 1
-      {0x42, 0x61, 0x51, 0x49, 0x46}, // 2
-      {0x21, 0x41, 0x45, 0x4B, 0x31}, // 3
-      {0x18, 0x14, 0x12, 0x7F, 0x10}, // 4
-      {0x27, 0x45, 0x45, 0x45, 0x39}, // 5
-      {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 6
-      {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
-      {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
-      {0x06, 0x49, 0x49, 0x29, 0x1E}, // 9
-      {0x7E, 0x11, 0x11, 0x11, 0x7E}, // A
-      {0x7F, 0x49, 0x49, 0x49, 0x36}, // B
-      {0x3E, 0x41, 0x41, 0x41, 0x22}, // C
-      {0x7F, 0x41, 0x41, 0x22, 0x1C}, // D
-      {0x7F, 0x49, 0x49, 0x49, 0x41}, // E
-      {0x7F, 0x09, 0x09, 0x09, 0x01}, // F
-      {0x3E, 0x41, 0x49, 0x49, 0x7A}, // G
-      {0x7F, 0x08, 0x08, 0x08, 0x7F}, // H
-      {0x00, 0x41, 0x7F, 0x41, 0x00}, // I
-      {0x20, 0x40, 0x41, 0x3F, 0x01}, // J
-      {0x7F, 0x08, 0x14, 0x22, 0x41}, // K
-      {0x7F, 0x40, 0x40, 0x40, 0x40}, // L
-      {0x7F, 0x02, 0x0C, 0x02, 0x7F}, // M
-      {0x7F, 0x04, 0x08, 0x10, 0x7F}, // N
-      {0x3E, 0x41, 0x41, 0x41, 0x3E}, // O
-      {0x7F, 0x09, 0x09, 0x09, 0x06}, // P
-      {0x3E, 0x41, 0x51, 0x21, 0x5E}, // Q
-      {0x7F, 0x09, 0x19, 0x29, 0x46}, // R
-      {0x46, 0x49, 0x49, 0x49, 0x31}, // S
-      {0x01, 0x01, 0x7F, 0x01, 0x01}, // T
-      {0x3F, 0x40, 0x40, 0x40, 0x3F}, // U
-      {0x1F, 0x20, 0x40, 0x20, 0x1F}, // V
-      {0x3F, 0x40, 0x38, 0x40, 0x3F}, // W
-      {0x63, 0x14, 0x08, 0x14, 0x63}, // X
-      {0x07, 0x08, 0x70, 0x08, 0x07}, // Y
-      {0x61, 0x51, 0x49, 0x45, 0x43}, // Z
-      {0x00, 0x36, 0x36, 0x00, 0x00}, // :
-      {0x08, 0x08, 0x08, 0x08, 0x08}, // -
-  };
-
-  if (ch >= 'a' && ch <= 'z')
-  {
-    ch = (char)(ch - 'a' + 'A');
-  }
-  if (ch == ' ')
-  {
-    return glyphs[0];
-  }
-  if (ch >= '0' && ch <= '9')
-  {
-    return glyphs[1 + (uint8_t)(ch - '0')];
-  }
-  if (ch >= 'A' && ch <= 'Z')
-  {
-    return glyphs[11 + (uint8_t)(ch - 'A')];
-  }
-  if (ch == ':')
-  {
-    return glyphs[37];
-  }
-  if (ch == '-')
-  {
-    return glyphs[38];
-  }
-  return glyphs[0];
+  (void)context;
+  lcd_fill(color);
 }
 
-static void lcd_draw_char(uint16_t x, uint16_t y, char ch, uint16_t fg, uint16_t bg, uint8_t scale)
+static void lcd_surface_fill_rect(void *context, uint16_t x, uint16_t y, uint16_t width,
+                                  uint16_t height, uint16_t color)
 {
-  const uint8_t *glyph = font5x7(ch);
-
-  for (uint8_t col = 0; col < 6; col++)
-  {
-    const uint8_t bits = (col < 5) ? glyph[col] : 0;
-    for (uint8_t row = 0; row < 8; row++)
-    {
-      const uint16_t color = (bits & BIT(row)) ? fg : bg;
-      lcd_fill_rect((uint16_t)(x + col * scale), (uint16_t)(y + row * scale), scale, scale, color);
-    }
-  }
+  (void)context;
+  lcd_fill_rect(x, y, width, height, color);
 }
 
-static void lcd_draw_text(uint16_t x, uint16_t y, const char *text, uint16_t fg, uint16_t bg,
-                          uint8_t scale)
-{
-  while (*text != '\0')
-  {
-    lcd_draw_char(x, y, *text, fg, bg, scale);
-    x = (uint16_t)(x + 6u * scale);
-    text++;
-  }
-}
-
-static void lcd_draw_color_bars(void)
-{
-  const uint16_t colors[] = {
-      rgb565(210, 48, 48),
-      rgb565(48, 180, 90),
-      rgb565(48, 96, 220),
-      rgb565(255, 190, 48),
-      rgb565(180, 72, 220),
-      rgb565(40, 210, 210),
-  };
-
-  for (uint8_t segment = 0; segment < 6; segment++)
-  {
-    const uint8_t color_index = (uint8_t)((segment + color_bar_rotation) % 6u);
-    lcd_fill_rect((uint16_t)(segment * 80u), 0, 80, 24, colors[color_index]);
-  }
-}
-
-static void lcd_draw_touch_button(bool pressed)
-{
-  const uint16_t fill = pressed ? rgb565(64, 210, 230) : rgb565(255, 190, 48);
-  const uint16_t text = pressed ? rgb565(12, 18, 28) : rgb565(12, 18, 28);
-
-  lcd_fill_rect(98, 214, 284, 58, fill);
-  lcd_fill_rect(102, 218, 276, 50, pressed ? rgb565(96, 235, 255) : rgb565(255, 205, 82));
-  lcd_draw_text(150, 232, "TOUCH CHIRP", text, pressed ? rgb565(96, 235, 255) : rgb565(255, 205, 82), 2);
-}
-
-static void lcd_draw_boot_screen(void)
-{
-  const uint16_t bg = rgb565(12, 18, 28);
-  const uint16_t white = rgb565(255, 255, 255);
-  const uint16_t amber = rgb565(255, 190, 48);
-  const uint16_t cyan = rgb565(64, 210, 230);
-
-  lcd_fill(bg);
-  lcd_draw_color_bars();
-  lcd_fill_rect(0, 296, 480, 24, amber);
-
-  lcd_draw_text(54, 26, "MEKATROL", white, bg, 4);
-  lcd_draw_text(54, 70, "PCB CNC MILL", white, bg, 4);
-  lcd_draw_text(84, 128, "BTT TFT35 E3", cyan, bg, 3);
-  lcd_draw_text(72, 174, "DIAL ROTATES TOP RGB", amber, bg, 2);
-  lcd_draw_touch_button(false);
-  lcd_draw_text(92, 300, "ENCODER BUTTON CHIRPS", bg, amber, 2);
-}
+static const display_surface_t lcd_surface = {
+  .context = 0,
+  .width_pixels = 480,
+  .height_pixels = 320,
+  .fill = lcd_surface_fill,
+  .fill_rect = lcd_surface_fill_rect,
+};
 
 static void lcd_initialize_ili9488(void)
 {
@@ -912,7 +783,7 @@ static void initialize_lcd_controller(void)
   }
   delay_ms(20);
 
-  lcd_draw_boot_screen();
+  display_render_draw_boot_screen(&display_render_context, &lcd_surface);
 }
 
 static void buzzer_set_output(bool high)
@@ -1005,14 +876,14 @@ static void touch_poll(void)
     {
       touch_reported_pressed = true;
       record_activity();
-      lcd_draw_touch_button(true);
+      display_render_draw_touch_button(&display_render_context, &lcd_surface, true);
       chirp(2200, 45);
     }
   }
   else if (touch_reported_pressed)
   {
     touch_reported_pressed = false;
-    lcd_draw_touch_button(false);
+    display_render_draw_touch_button(&display_render_context, &lcd_surface, false);
   }
 }
 
@@ -1036,16 +907,7 @@ uint32_t display_get_monotonic_milliseconds(void)
 void display_run_background_tasks(void)
 {
   const int8_t encoder_delta = encoder_poll();
-  if (encoder_delta > 0)
-  {
-    color_bar_rotation = (uint8_t)((color_bar_rotation + 1u) % 6u);
-    lcd_draw_color_bars();
-  }
-  else if (encoder_delta < 0)
-  {
-    color_bar_rotation = (uint8_t)((color_bar_rotation + 5u) % 6u);
-    lcd_draw_color_bars();
-  }
+  display_render_rotate_color_bars(&display_render_context, &lcd_surface, encoder_delta);
   touch_poll();
   backlight_check_idle_timeout();
   knob_led_update_rainbow();

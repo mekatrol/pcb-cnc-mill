@@ -135,9 +135,13 @@ endif
 # =========================
 COMMON_CSRCS := core/runtime/scheduler.c \
                 core/runtime/chirp.c
+DISPLAY_CSRCS := core/display/display_render.c \
+                 core/display/display_strings.c \
+                 core/display/display_surface.c
 
 CSRCS := $(ENTRY_CSRCS) \
          $(COMMON_CSRCS) \
+         $(if $(filter display,$(BUILD_TARGET)),$(DISPLAY_CSRCS)) \
          $(wildcard $(BOARD_DIR)/*.c) \
          $(if $(MAINBOARD_DISPLAY_ENABLED),$(wildcard $(MAINBOARD_DISPLAY_DIR)/*.c)) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.c))

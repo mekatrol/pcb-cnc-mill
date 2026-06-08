@@ -168,12 +168,19 @@ Purpose:
 
 - Run normal display service work such as encoder polling, touch polling,
   backlight timeout checks, LED updates, and bounded display refresh work.
+- Feed local input events and physical display drawing callbacks into shared
+  display rendering code. Screen composition, shared text layout, menu state,
+  and common display strings belong in `firmware/core/display/`, not in the
+  board HAL.
 
 Timing:
 
 - Called from a scheduler task.
 - Must do bounded work and return.
 - Must not wait for another scheduled task or a long display transfer.
+- Must not embed role-independent screen layouts or user-facing menu strings in
+  the board HAL. Board code may expose low-level pixel, rectangle, text-bus, or
+  tile transfer primitives needed by the selected display controller.
 
 ### `display_run_buzzer_tasks`
 
