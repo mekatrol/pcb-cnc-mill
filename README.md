@@ -152,6 +152,21 @@ card root. For the default GD32 TFT35 E3 display, copy
 display SD card root. These images are linked above the factory bootloader
 regions so normal updates do not replace BTT's bootloader.
 
+For the default GD32 TFT35 E3 display SD-card update flow, build the display
+firmware, find the mounted card, copy the BTT bootloader update file to the
+card root, flush writes, and unmount it before removing the card. Replace
+`SDCARD` if the card is mounted with a different volume label:
+
+```sh
+make -C firmware display
+cp firmware/build/display/btt_tft35_e3/BIGTREE_GD_TFT35_V3.0_E3.27.x.bin /media/$USER/SDCARD/
+sync
+umount /media/$USER/SDCARD
+```
+
+Insert the microSD card into the TFT35 E3 and reset or power-cycle the display
+so the BTT bootloader can burn the update image.
+
 If a board has previously been direct-flashed and no longer has a working BTT
 bootloader at the start of flash, either keep using a direct-SWD recovery image
 or restore the copied BTT bootloader. The direct-SWD image links the app at
