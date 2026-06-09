@@ -12,48 +12,59 @@ void usart_init_hal(
     GPIO_TypeDef *gpio,
     uint32_t tx_pin,
     uint32_t rx_pin,
+    volatile uint32_t *usart_enable_register,
     uint32_t usart_enable_bit,
-    IRQn_Type irq_no) {
+    IRQn_Type irq_no)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
+  uint32_t tx_alternate_function_register = tx_pin / 8U;
+  uint32_t rx_alternate_function_register = rx_pin / 8U;
+  uint32_t tx_alternate_function_shift = (tx_pin % 8U) * GPIO_AF_BIT_COUNT;
+  uint32_t rx_alternate_function_shift = (rx_pin % 8U) * GPIO_AF_BIT_COUNT;
 
   // Enable clock to UART
-  RCC->APBENR1 |= usart_enable_bit;
+  *usart_enable_register |= usart_enable_bit;
 
-  // Configure PA2 and PA3 to alternate function
-  GPIO_SET_MODE(gpio, tx_pin, MODER_ALT);  // Set mode to alternate function (AF) on PA2
-  GPIO_SET_MODE(gpio, rx_pin, MODER_ALT);  // Set mode to alternate function (AF) on PA3
+  // Configure the TX and RX pins to alternate function mode.
+  GPIO_SET_MODE(gpio, tx_pin, MODER_ALT);
+  GPIO_SET_MODE(gpio, rx_pin, MODER_ALT);
 
-  // Configure PA2 and PA3 to alternate function AF1 (usart)
-  gpio->AFR[0] &= ~((GPIO_AF_MSK << (tx_pin * GPIO_AF_BIT_COUNT)) | (GPIO_AF_MSK << (rx_pin * GPIO_AF_BIT_COUNT)));
-  gpio->AFR[0] |= ((GPIO_AF1 << (tx_pin * GPIO_AF_BIT_COUNT)) | (GPIO_AF1 << (rx_pin * GPIO_AF_BIT_COUNT)));
+  // AF1 connects the selected GPIO pins to USART on the STM32G0B1.
+  gpio->AFR[tx_alternate_function_register] &= ~(GPIO_AF_MSK << tx_alternate_function_shift);
+  gpio->AFR[tx_alternate_function_register] |= (GPIO_AF1 << tx_alternate_function_shift);
+  gpio->AFR[rx_alternate_function_register] &= ~(GPIO_AF_MSK << rx_alternate_function_shift);
+  gpio->AFR[rx_alternate_function_register] |= (GPIO_AF1 << rx_alternate_function_shift);
 
   // Configure usart
-  hal->CR1 &= ~USART_CR1_UE;                                          // Disable usart
-  hal->BRR = usart->baud_rate;                                        // Set baud rate
-  hal->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE;  // Enable tx and rx + rx interrupts (tx interrupts will be enabled when data sent)
-  hal->CR3 = 0;                                                       // No half-duplex
-  hal->CR1 |= USART_CR1_UE;                                           // Enable usart
+  hal->CR1 &= ~USART_CR1_UE;                                         // Disable usart
+  hal->BRR = usart->baud_rate;                                       // Set baud rate
+  hal->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE; // Enable tx and rx + rx interrupts (tx interrupts will be enabled when data sent)
+  hal->CR3 = 0;                                                      // No half-duplex
+  hal->CR1 |= USART_CR1_UE;                                          // Enable usart
 
   // Enable interrupts for usart
   NVIC_EnableIRQ(irq_no);
 }
 
-void usart_tx_enable_hal(usart_instance_t *usart) {
+void usart_tx_enable_hal(usart_instance_t *usart)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 
   hal->CR1 |= USART_CR1_TXEIE_TXFNFIE;
 }
 
-void usart_tx_disable_hal(usart_instance_t *usart) {
+void usart_tx_disable_hal(usart_instance_t *usart)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 
   hal->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
 }
 
-int16_t usart_read(usart_instance_t *usart) {
+int16_t usart_read(usart_instance_t *usart)
+{
   // Default to no data available
   int16_t data = -1;
 
@@ -63,16 +74,20 @@ int16_t usart_read(usart_instance_t *usart) {
   // Disable receive data interrupt while getting rx data
   hal->CR1 &= ~(USART_CR1_RXNEIE_RXFNEIE);
 
-  if (usart->rx_buffer_tail != usart->rx_buffer_head) {
+  if (usart->rx_buffer_tail != usart->rx_buffer_head)
+  {
     // Read from rx buffer
     data = usart->rx_buffer[usart->rx_buffer_tail++];
 
-    if (usart->rx_buffer_tail >= usart->rx_buffer_size) {
+    if (usart->rx_buffer_tail >= usart->rx_buffer_size)
+    {
       usart->rx_buffer_tail = 0;
     }
 
     usart->rx_count--;
-  } else {
+  }
+  else
+  {
     usart->rx_count = 0;
   }
 
@@ -83,7 +98,8 @@ int16_t usart_read(usart_instance_t *usart) {
   return data;
 }
 
-void usart_send(usart_instance_t *usart, uint8_t b) {
+void usart_send(usart_instance_t *usart, uint8_t b)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 
@@ -93,7 +109,8 @@ void usart_send(usart_instance_t *usart, uint8_t b) {
   // Add byte to TX buffer
   usart->tx_buffer[usart->tx_buffer_head++] = b;
 
-  if (usart->tx_buffer_head >= usart->tx_buffer_size) {
+  if (usart->tx_buffer_head >= usart->tx_buffer_size)
+  {
     usart->tx_buffer_head = 0;
   }
 
@@ -101,7 +118,8 @@ void usart_send(usart_instance_t *usart, uint8_t b) {
   hal->CR1 |= USART_CR1_TXEIE_TXFNFIE;
 }
 
-void usart_wait_data_sent(usart_instance_t *usart) {
+void usart_wait_data_sent(usart_instance_t *usart)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 
@@ -109,45 +127,57 @@ void usart_wait_data_sent(usart_instance_t *usart) {
   // hal->CR1 |= USART_CR1_TXEIE_TXFNFIE;
 
   // Wait until transmit data register empty
-  while (!(hal->ISR & USART_ISR_TXE_TXFNF));
+  while (!(hal->ISR & USART_ISR_TXE_TXFNF))
+    ;
 
   // Wait transmit complete
-  while (!(hal->ISR & USART_ISR_TC));
+  while (!(hal->ISR & USART_ISR_TC))
+    ;
 }
 
-void usart_irq_handler(usart_instance_t *usart) {
+void usart_irq_handler(usart_instance_t *usart)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 
   // Is the TX buffer empty?
-  if ((hal->ISR & USART_ISR_TXE_TXFNF)) {
-    if (usart->tx_buffer_tail != usart->tx_buffer_head) {
+  if ((hal->ISR & USART_ISR_TXE_TXFNF))
+  {
+    if (usart->tx_buffer_tail != usart->tx_buffer_head)
+    {
       uint8_t data = usart->tx_buffer[usart->tx_buffer_tail++];
 
-      if (usart->tx_buffer_tail >= usart->tx_buffer_size) {
+      if (usart->tx_buffer_tail >= usart->tx_buffer_size)
+      {
         usart->tx_buffer_tail = 0;
       }
 
       hal->TDR = data;
-    } else {
+    }
+    else
+    {
       // Disable TX empty interrupt until more data sent
       hal->CR1 &= ~(USART_CR1_TXEIE_TXFNFIE);
     }
   }
 
   // Is RX buffer not empty?
-  if (hal->ISR & USART_ISR_RXNE_RXFNE) {
+  if (hal->ISR & USART_ISR_RXNE_RXFNE)
+  {
     usart->rx_buffer[usart->rx_buffer_head++] = hal->RDR;
     usart->rx_count++;
 
-    if (usart->rx_buffer_head >= usart->rx_buffer_size) {
+    if (usart->rx_buffer_head >= usart->rx_buffer_size)
+    {
       usart->rx_buffer_head = 0;
     }
   }
 }
 
-bool usart_wait_for_count(usart_instance_t *usart, uint8_t count, uint32_t max_wait_ms) {
-  while (usart->rx_count < count && max_wait_ms-- > 0) {
+bool usart_wait_for_count(usart_instance_t *usart, uint8_t count, uint32_t max_wait_ms)
+{
+  while (usart->rx_count < count && max_wait_ms-- > 0)
+  {
     delay_ms(1);
   }
 
@@ -155,7 +185,8 @@ bool usart_wait_for_count(usart_instance_t *usart, uint8_t count, uint32_t max_w
   return usart->rx_count >= count;
 }
 
-void usart_clear_buffers(usart_instance_t *usart) {
+void usart_clear_buffers(usart_instance_t *usart)
+{
   // Cast specific hal type
   USART_TypeDef *hal = (USART_TypeDef *)usart->hal;
 

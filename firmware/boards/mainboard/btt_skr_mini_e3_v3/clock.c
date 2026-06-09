@@ -32,15 +32,27 @@ static inline void sys_tick_init(uint32_t ticks) {
                   SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
 }
 
-void clock_init() {
-  // Init Sys Tick
-  sys_tick_init(F_SYS_CLOCK / (1000U / (uint32_t)HAL_TICK_FREQ_1KHZ));
+static void reset_system_clock_to_internal_high_speed_clock(void)
+{
+  // Start from a known-safe clock source before changing PLL fields. A
+  // bootloader may jump here with SYSCLK still sourced from its PLL setup.
+  RCC->CR |= RCC_CR_HSION;
+  RCC->CR &= ~RCC_CR_HSIDIV;
+  while ((RCC->CR & RCC_CR_HSIRDY) == 0);
 
+  RCC->CFGR &= ~RCC_CFGR_SW;
+  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSISYS);
+
+  RCC->CR &= ~RCC_CR_PLLON;
+  while ((RCC->CR & RCC_CR_PLLRDY) != 0);
+
+  RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);
+}
+
+void clock_init() {
   RCC->CR |= RCC_CR_HSEON;             // Enable HSE
   while (!(RCC->CR & RCC_CR_HSERDY));  // Wait for HSE ready
-
-  RCC->CR &= ~RCC_CR_PLLON;         // Disable PLL
-  while (RCC->CR & RCC_CR_PLLRDY);  // Wait for PLL to unlock
+  reset_system_clock_to_internal_high_speed_clock();
 
   RCC->PLLCFGR =
       (0b11 << 0) |   // PLLSRC = HSE
@@ -52,14 +64,15 @@ void clock_init() {
   RCC->CR |= RCC_CR_PLLON;             // Enable PLL
   while (!(RCC->CR & RCC_CR_PLLRDY));  // Wait for PLL ready
 
-  FLASH->ACR = (FLASH->ACR & ~(0x11)) | (1 << 0);  // 1 wait state
+  FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_0;  // 1 wait state
 
-  RCC->CFGR &= ~(0x3 << 0);  // Clear SW bits
-  RCC->CFGR |= (0x2 << 0);   // Set SYSCLK = PLL
-  RCC->CFGR &= ~(0xF << 4);  // AHB = /1
-  RCC->CFGR &= ~(0x7 << 8);  // APB1 = /1
+  RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);  // AHB = /1, APB = /1
+  RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_1;  // SYSCLK = PLLRCLK
 
-  while ((RCC->CFGR & (0x3 << 3)) != (0x2 << 3));  // Wait for switch to PLL
+  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLLRCLK);  // Wait for switch to PLL
+
+  // Init Sys Tick after the system clock is at the frequency used by F_SYS_CLOCK.
+  sys_tick_init(F_SYS_CLOCK / (1000U / (uint32_t)HAL_TICK_FREQ_1KHZ));
 }
 
 inline uint32_t get_sys_tick() {

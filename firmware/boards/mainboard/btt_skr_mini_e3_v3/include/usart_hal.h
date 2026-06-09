@@ -19,7 +19,14 @@ typedef struct {
   volatile void *hal;
 } usart_instance_t;
 
-void usart_init_hal(usart_instance_t *usart, GPIO_TypeDef *gpio, uint32_t rx_pin, uint32_t tx_pin, uint32_t usart_enable_bit, IRQn_Type irq_no);
+void usart_init_hal(
+    usart_instance_t *usart,
+    GPIO_TypeDef *gpio,
+    uint32_t tx_pin,
+    uint32_t rx_pin,
+    volatile uint32_t *usart_enable_register,
+    uint32_t usart_enable_bit,
+    IRQn_Type irq_no);
 
 int16_t usart_read(usart_instance_t *usart);
 void usart_send(usart_instance_t *usart, uint8_t b);

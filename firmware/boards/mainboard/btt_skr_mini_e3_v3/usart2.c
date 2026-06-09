@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #include "clock.h"
 #include "board_hal.h"
 #include "usart_hal.h"
@@ -29,25 +31,51 @@ static usart_instance_t usart2_instance = {
 
     /**/};
 
-void diag_usart2_init() {
+void tft_usart2_init()
+{
+  // Use APB/PCLK for the USART kernel clock so BRR matches F_SYS_CLOCK.
+  RCC->CCIPR &= ~RCC_CCIPR_USART2SEL;
+
   usart_init_hal(
       &usart2_instance,      // The usart instance data
       GPIOA,                 // The GPIO port the usart is on
       BIT_02_POS,            // The GPIO TX pin
       BIT_03_POS,            // The GPIO rx pin
+      &RCC->APBENR1,         // The USART peripheral clock enable register
       RCC_APBENR1_USART2EN,  // The USART enable bit
       USART2_LPUART2_IRQn    // The usart IRQ number
   );
 }
 
-void diag_send(uint8_t b) {
-  usart_send(&usart2_instance, b);
+bool usart2_byte_available(void)
+{
+  return usart2_instance.rx_count > 0;
 }
 
-void diag_flush() {
-  usart_wait_data_sent(&usart2_instance);
+uint8_t usart2_read_byte(void)
+{
+  int16_t value = usart_read(&usart2_instance);
+  return value < 0 ? 0 : (uint8_t)value;
 }
 
-void USART2_IRQHandler() {
+bool usart2_transmit_ready(void)
+{
+  uint32_t next_tx_buffer_head = usart2_instance.tx_buffer_head + 1;
+
+  if (next_tx_buffer_head >= usart2_instance.tx_buffer_size)
+  {
+    next_tx_buffer_head = 0;
+  }
+
+  return next_tx_buffer_head != usart2_instance.tx_buffer_tail;
+}
+
+void usart2_write_byte(uint8_t value)
+{
+  usart_send(&usart2_instance, value);
+}
+
+void USART2_IRQHandler()
+{
   usart_irq_handler(&usart2_instance);
 }

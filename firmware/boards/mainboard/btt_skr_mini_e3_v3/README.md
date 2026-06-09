@@ -90,8 +90,25 @@ Then connect GDB with `debug.gdb`.
 
 ## Current bring-up scope
 
-The board HAL initializes the TFT header serial link used by a standalone
-TFT35 E3 in touch-screen mode:
+The board HAL initializes two interrupt-buffered serial links:
+
+Status LED:
+
+- Pin: `PD8`
+- Pattern: toggled by the TIM7 interrupt every 1 second, giving a 1 second on /
+  1 second off visible heartbeat
+
+Diagnostics:
+
+- Connector: SKR Mini E3 V3 `EXP1`
+- Peripheral: `USART1`
+- TX: `PA9` / `EXP1_3`
+- RX: `PA10` / `EXP1_5`
+- Format: `115200` baud, 8 data bits, no parity, 1 stop bit
+- Bring-up output: one boot banner followed by `mainboard alive` every 5
+  seconds
+
+Standalone TFT35 E3 touch-screen mode link:
 
 - Connector: SKR Mini E3 V3 `TFT`
 - Peripheral: `USART2`
@@ -100,12 +117,21 @@ TFT35 E3 in touch-screen mode:
 - Format: `115200` baud, 8 data bits, no parity, 1 stop bit
 
 The HAL exposes non-blocking raw byte probes/read/write methods for the future
-mainboard-to-display protocol. The current skeleton sends heartbeat byte
-`0xA5` from the background loop when the TFT UART is ready, giving standalone
-display firmware a simple link-liveness signal. It does not yet implement
-command framing, status reporting, G-code forwarding, buffering, retries, or
-display state synchronization.
+mainboard-to-display protocol. USART2 is dedicated to TFT traffic so diagnostic
+text on EXP1 cannot appear in the display stream. The current skeleton sends
+heartbeat byte `0xA5` every 500 ms when the USART2 transmit buffer has space,
+giving standalone display firmware a simple link-liveness signal. It does not
+yet implement command framing, status reporting, G-code forwarding,
+protocol-level buffering, retries, or display state synchronization.
 
-This is only the bring-up base. Pin mapping, stepper timers, USB CDC, heaters,
-fans, endstops, probe input, spindle IO, EEPROM, and board safety behavior
-still need board verification before use.
+USB CDC bring-up depends on two startup steps: startup relocates the interrupt
+vector table for the BTT bootloader app offset, then the mainboard HAL enables
+clocks, GPIO, timers, interrupts, limit inputs, and the STM32G0 USB device
+peripheral before the shared USB device state is initialized. The main loop
+gates the USB millisecond hook from the board SysTick counter so suspend and
+disconnect detection do not run on a tight-loop counter and do not block other
+background work.
+
+This is still only the bring-up base. Pin mapping, stepper timers, USB CDC
+behavior on hardware, heaters, fans, endstops, probe input, spindle IO, EEPROM,
+and board safety behavior need board verification before use.

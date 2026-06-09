@@ -11,6 +11,7 @@
 .global       TIM6_DAC_IRQHandler
 .global       TIM7_IRQHandler
 .global       TIM14_IRQHandler
+.global       USART1_IRQHandler
 .global       USART2_IRQHandler
 .global       USART3_4_LPUART1_IRQHandler
 .global       Default_Handler
@@ -99,7 +100,7 @@ g_pfnVectors:
 .word         Default_Handler               // IRQ24
 .word         Default_Handler               // IRQ25
 .word         Default_Handler               // IRQ26
-.word         Default_Handler               // IRQ27
+.word         USART1_IRQHandler             // IRQ27
 .word         USART2_IRQHandler             // IRQ28
 .word         USART3_4_LPUART1_IRQHandler   // IRQ29
 .word         Default_Handler               // IRQ30
@@ -114,6 +115,24 @@ g_pfnVectors:
 .section      .text.Reset_Handler
 .type         Reset_Handler, %function
 Reset_Handler:
+   cpsid      i
+
+   // The BTT bootloader layout links this application at 0x08002000 instead of
+   // the reset default 0x08000000. Program the System Control Block Vector
+   // Table Offset Register before any interrupt source can dispatch.
+   ldr        r0, =0xE000ED08
+   ldr        r1, =g_pfnVectors
+   str        r1, [r0]
+
+   // Stop any SysTick state inherited from the bootloader. The board clock
+   // initialization restarts SysTick after the application owns its vectors and
+   // has configured the system clock.
+   ldr        r0, =0xE000E010
+   movs       r1, #0
+   str        r1, [r0]
+   str        r1, [r0, #4]
+   str        r1, [r0, #8]
+
    // Zero BSS
    ldr        r0, =_sbss
    ldr        r1, =_ebss

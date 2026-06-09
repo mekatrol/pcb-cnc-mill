@@ -86,6 +86,16 @@ common startup flow, priority task table, optional preemptive dispatch for
 urgent priorities, interrupt-to-task events, bounded queues, and short critical
 sections. Board support selects the hardware details and enabled features.
 
+For the BTT SKR Mini E3 V3 mainboard, startup relocates the interrupt vector
+table for the BTT bootloader app offset, then board startup initializes clocks,
+GPIO, timers, safety inputs, and the STM32G0 USB device peripheral before the
+shared USB device state machine starts. The main loop gates the USB
+millisecond tick from the board SysTick counter so suspend and disconnect
+detection use host-frame-scale timing without blocking other background work.
+The same board keeps diagnostics and the TFT35 E3 link on separate
+interrupt-buffered serial ports: USART1 on EXP1 for diagnostics and USART2 on
+the TFT header for the display heartbeat and future display protocol traffic.
+
 Display support has two hardware models:
 
 - Standalone display firmware: the display board has its own MCU and firmware

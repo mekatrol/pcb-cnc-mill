@@ -46,6 +46,8 @@ void usb_cdc_rx_cb()
 
 int main(void)
 {
+  uint32_t last_usb_millisecond_tick = 0;
+
   // Keep the shared mainboard entry point hardware-neutral. Board-specific
   // startup, pin setup, clocks, and peripheral quirks live behind this HAL.
   mainboard_initialize_hardware();
@@ -63,7 +65,17 @@ int main(void)
   while (1)
   {
     mainboard_run_background_tasks();
-    usb_systick_hal();
+
+    // The USB HAL uses this hook as a 1 ms software tick for suspend/offline
+    // detection. Gate it from the board millisecond counter instead of
+    // blocking the whole main loop, so background work can continue to run
+    // between USB service ticks.
+    uint32_t current_millisecond_tick = get_sys_tick();
+    if ((uint32_t)(current_millisecond_tick - last_usb_millisecond_tick) >= 1)
+    {
+      last_usb_millisecond_tick = current_millisecond_tick;
+      usb_systick_hal();
+    }
 
 #ifdef MAINBOARD_HAS_DISPLAY_MODULE
     mainboard_display_module_run_background_tasks();
