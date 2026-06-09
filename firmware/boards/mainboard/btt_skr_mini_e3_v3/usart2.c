@@ -70,6 +70,26 @@ bool usart2_transmit_ready(void)
   return next_tx_buffer_head != usart2_instance.tx_buffer_tail;
 }
 
+bool usart2_transmit_space_available(uint8_t byte_count)
+{
+  uint32_t used;
+
+  if (usart2_instance.tx_buffer_head >= usart2_instance.tx_buffer_tail)
+  {
+    used = usart2_instance.tx_buffer_head - usart2_instance.tx_buffer_tail;
+  }
+  else
+  {
+    used = usart2_instance.tx_buffer_size - usart2_instance.tx_buffer_tail +
+           usart2_instance.tx_buffer_head;
+  }
+
+  // Leave one byte empty so head and tail equality continues to mean the ring
+  // is empty. This lets a protocol frame be queued atomically when the caller
+  // has already checked the whole frame length.
+  return byte_count < (usart2_instance.tx_buffer_size - used);
+}
+
 void usart2_write_byte(uint8_t value)
 {
   usart_send(&usart2_instance, value);

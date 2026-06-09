@@ -142,12 +142,16 @@ implemented. Screen text and layout now live under `firmware/core/display/`;
 this board folder owns only the physical LCD bus, controller setup, touch,
 encoder, backlight, buzzer, knob LED behavior, and the raw serial transport to
 the mainboard. The home screen has a top-right serial-link indicator: it starts
-as `LINK WAIT`, changes to `LINK OK` when heartbeat byte `0xA5` arrives from
-the mainboard, and changes to `LINK LOST` when no heartbeat is received for
-1.5 seconds. The serial HAL exposes non-blocking byte probes/read/write methods
-only; framing, buffering, command routing, and machine-status exchange still
-need a shared protocol layer. The LCD backlight and knob RGB LEDs turn on after
-reset; during
+as `LINK WAIT`, changes to `LINK OK` when a valid CRC-protected heartbeat frame
+arrives from the mainboard, and changes to `LINK LOST` when no valid heartbeat
+is received for 1.5 seconds. Display RS232 protocol frames use
+`0xA5, type, length, payload..., crc_hi, crc_lo`; heartbeat is type `0x01` with
+length `0`, and CRC-16/CCITT-FALSE covers `type`, `length`, and any payload
+bytes. The serial HAL exposes non-blocking byte probes/read/write methods only;
+received bytes are captured by a USART interrupt into a circular buffer before
+the background task parses frames. Command routing, machine-status exchange,
+retries, and larger protocol-level buffering still need to be added. The LCD
+backlight and knob RGB LEDs turn on after reset; during
 normal operation the knob RGB LEDs cycle through a rainbow. The backlight and
 knob LEDs turn off after 30 seconds without a touch, encoder rotation, or
 encoder button press; any of those events turns them back on and restarts the

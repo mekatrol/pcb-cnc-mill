@@ -139,7 +139,8 @@ COMMON_CSRCS := core/runtime/runtime_scheduler.c \
                 core/runtime/chirp.c \
                 core/runtime/circular_buffer.c \
                 core/runtime/motion.c \
-                core/runtime/diagnostics.c
+                core/runtime/diagnostics.c \
+                core/runtime/rs232_display_protocol.c
 DISPLAY_CSRCS := core/display/display_render.c \
                  core/display/display_strings.c \
                  core/display/display_surface.c

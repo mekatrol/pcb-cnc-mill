@@ -94,7 +94,8 @@ millisecond tick from the board SysTick counter so suspend and disconnect
 detection use host-frame-scale timing without blocking other background work.
 The same board keeps diagnostics and the TFT35 E3 link on separate
 interrupt-buffered serial ports: USART1 on EXP1 for diagnostics and USART2 on
-the TFT header for the display heartbeat and future display protocol traffic.
+the TFT header for CRC-protected display heartbeat frames and future display
+protocol traffic.
 
 Display support has two hardware models:
 

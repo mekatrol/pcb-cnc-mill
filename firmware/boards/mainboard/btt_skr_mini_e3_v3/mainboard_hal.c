@@ -2,10 +2,10 @@
 #include <stdint.h>
 
 #include "mainboard_hal.h"
+#include "rs232_display_protocol.h"
 
 enum
 {
-  DISPLAY_SERIAL_HEARTBEAT_BYTE = 0xA5,
   DISPLAY_SERIAL_HEARTBEAT_INTERVAL_MS = 500,
   DIAGNOSTIC_HEARTBEAT_INTERVAL_MS = 5000,
 };
@@ -18,6 +18,7 @@ void tft_usart2_init();
 bool usart2_byte_available(void);
 uint8_t usart2_read_byte(void);
 bool usart2_transmit_ready(void);
+bool usart2_transmit_space_available(uint8_t byte_count);
 void usart2_write_byte(uint8_t value);
 void tmc2209_uart4_init();
 void tmc2209_tick(uint32_t elapsed_ms, uint32_t elapsed_sec);
@@ -25,6 +26,21 @@ void init_eeprom();
 void i2c1_master_init();
 void limits_init_hal();
 void usb_init_board_hal();
+
+static bool write_display_serial_frame(const uint8_t *frame, uint8_t frame_size)
+{
+  if (!usart2_transmit_space_available(frame_size))
+  {
+    return false;
+  }
+
+  for (uint8_t index = 0; index < frame_size; index++)
+  {
+    mainboard_display_serial_write_byte(frame[index]);
+  }
+
+  return true;
+}
 
 void init_gpio()
 {
@@ -81,15 +97,21 @@ void mainboard_run_background_tasks(void)
 {
   uint32_t current_millisecond_tick = get_sys_tick();
 
-  // The TFT35 E3 display marks the link lost after 1.5 seconds without a
-  // heartbeat byte. Send through the USART2 interrupt-buffered driver so the
+  // The TFT35 E3 display marks the link lost after 1.5 seconds without a valid
+  // heartbeat frame. Send through the USART2 interrupt-buffered driver so the
   // TFT link owns its peripheral registers separately from diagnostics.
   if ((uint32_t)(current_millisecond_tick - last_display_serial_heartbeat_ms) >=
-          DISPLAY_SERIAL_HEARTBEAT_INTERVAL_MS &&
-      mainboard_display_serial_transmit_ready())
+      DISPLAY_SERIAL_HEARTBEAT_INTERVAL_MS)
   {
-    mainboard_display_serial_write_byte(DISPLAY_SERIAL_HEARTBEAT_BYTE);
-    last_display_serial_heartbeat_ms = current_millisecond_tick;
+    uint8_t heartbeat_frame[RS232_DISPLAY_PROTOCOL_HEARTBEAT_FRAME_SIZE];
+    const uint8_t heartbeat_frame_size = rs232_display_protocol_build_heartbeat_frame(
+        heartbeat_frame,
+        sizeof(heartbeat_frame));
+
+    if (write_display_serial_frame(heartbeat_frame, heartbeat_frame_size))
+    {
+      last_display_serial_heartbeat_ms = current_millisecond_tick;
+    }
   }
 
   // Keep a slow diagnostics heartbeat during board bring-up so the EXP1

@@ -116,13 +116,15 @@ Standalone TFT35 E3 touch-screen mode link:
 - RX: `PA3`
 - Format: `115200` baud, 8 data bits, no parity, 1 stop bit
 
-The HAL exposes non-blocking raw byte probes/read/write methods for the future
+The HAL exposes non-blocking raw byte probes/read/write methods for the
 mainboard-to-display protocol. USART2 is dedicated to TFT traffic so diagnostic
-text on EXP1 cannot appear in the display stream. The current skeleton sends
-heartbeat byte `0xA5` every 500 ms when the USART2 transmit buffer has space,
-giving standalone display firmware a simple link-liveness signal. It does not
-yet implement command framing, status reporting, G-code forwarding,
-protocol-level buffering, retries, or display state synchronization.
+text on EXP1 cannot appear in the display stream. The current skeleton sends a
+CRC-protected heartbeat frame every 500 ms when the USART2 transmit buffer has
+space. The frame format is `0xA5, type, length, payload..., crc_hi, crc_lo`;
+the heartbeat uses type `0x01`, length `0`, and CRC-16/CCITT-FALSE over
+`type`, `length`, and any payload bytes. It does not yet implement status
+reporting, G-code forwarding, protocol-level buffering, retries, or display
+state synchronization.
 
 USB CDC bring-up depends on two startup steps: startup relocates the interrupt
 vector table for the BTT bootloader app offset, then the mainboard HAL enables

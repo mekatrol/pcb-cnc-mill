@@ -5,6 +5,7 @@
 .global g_pfnVectors
 .global Reset_Handler
 .global Default_Handler
+.global USART1_IRQHandler
 
 .section .isr_vector, "a", %progbits
 .align 2
@@ -28,8 +29,14 @@ g_pfnVectors:
   .word PendSV_Handler
   .word SysTick_Handler
 
-  /* STM32F207 interrupt vectors. Keep unused IRQs on the default handler. */
-  .rept 82
+  /* STM32F207/GD32F205 interrupt vectors. Keep unused IRQs on the default handler.
+     GD32 names the APB1 serial block at 0x40004400 USART1; it uses external
+     IRQ 38 in this vector table. */
+  .rept 38
+  .word Default_Handler
+  .endr
+  .word USART1_IRQHandler
+  .rept 43
   .word Default_Handler
   .endr
 

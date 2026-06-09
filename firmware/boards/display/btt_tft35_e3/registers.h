@@ -11,6 +11,7 @@
 #define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000u)
 #define AHB1PERIPH_BASE (PERIPH_BASE + 0x00020000u)
 #define SYSTICK_BASE 0xE000E010u
+#define NVIC_BASE 0xE000E100u
 
 #define AFIO_BASE (APB2PERIPH_BASE + 0x0000u)
 #define RCU_BASE (AHB1PERIPH_BASE + 0x1000u)
@@ -63,6 +64,7 @@
 #define SYST_CSR MMIO32(SYSTICK_BASE + 0x00u)
 #define SYST_RVR MMIO32(SYSTICK_BASE + 0x04u)
 #define SYST_CVR MMIO32(SYSTICK_BASE + 0x08u)
+#define NVIC_ISER(index) MMIO32(NVIC_BASE + ((index) * 4u))
 
 // The LCD controller is memory-mapped through EXMC bank 0. These addresses
 // match BTT's GD32F20x HAL mapping for PE2/FSMC_A23 as the LCD RS line.

@@ -1,10 +1,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "circular_buffer.h"
 #include "display_hal.h"
 #include "display_render.h"
 #include "registers.h"
-#include "runtime/chirp.h"
+#include "rs232_display_protocol.h"
+#include "chirp.h"
 
 enum
 {
@@ -26,8 +28,8 @@ enum
   MAINBOARD_SERIAL_TX_PIN = 2, // TFT35 RS232 connector: PA2 / USART1_TX
   MAINBOARD_SERIAL_RX_PIN = 3, // TFT35 RS232 connector: PA3 / USART1_RX
   MAINBOARD_SERIAL_BAUD = 115200,
-  MAINBOARD_SERIAL_HEARTBEAT_BYTE = 0xA5,
   MAINBOARD_SERIAL_RECEIVE_BYTES_PER_SERVICE = 32,
+  MAINBOARD_SERIAL_RX_BUFFER_SIZE = 2048,
   MAINBOARD_SERIAL_LINK_TIMEOUT_MS = 1500,
   APB1_PERIPHERAL_CLOCK_HZ = SYSTEM_CORE_CLOCK_HZ / 2u,
   KNOB_LED_PIXELS = 2, // Upstream GD TFT35 E3 V3.0: NEOPIXEL_PIXELS 2
@@ -63,6 +65,9 @@ static uint8_t knob_led_rainbow_phase;
 static runtime_chirp_t buzzer_chirp;
 static display_link_state_t mainboard_link_state = DISPLAY_LINK_STATE_WAITING;
 static uint32_t last_mainboard_heartbeat_ms;
+static rs232_display_protocol_parser_t mainboard_serial_parser;
+static circular_buffer_t mainboard_serial_rx_buffer;
+static uint8_t mainboard_serial_rx_buffer_storage[MAINBOARD_SERIAL_RX_BUFFER_SIZE];
 
 static void knob_led_set_enabled(bool enabled);
 
@@ -496,10 +501,19 @@ static void initialize_mainboard_serial_link(void)
   USART_BAUD(USART1_BASE) = (APB1_PERIPHERAL_CLOCK_HZ + (MAINBOARD_SERIAL_BAUD / 2u)) /
                             MAINBOARD_SERIAL_BAUD;
 
-  // Enable 8 data bits, no parity, one stop bit, transmitter, receiver, and
-  // the USART peripheral itself. Higher-level framing and buffering should live
-  // in shared communication code, not in the physical board HAL.
-  USART_CTL0(USART1_BASE) = BIT(13) | BIT(3) | BIT(2);
+  circular_buffer_init(
+      &mainboard_serial_rx_buffer,
+      mainboard_serial_rx_buffer_storage,
+      sizeof(mainboard_serial_rx_buffer_storage));
+
+  // Enable 8 data bits, no parity, one stop bit, transmitter, receiver,
+  // receive-not-empty interrupt, and the USART peripheral itself. The interrupt
+  // only moves raw bytes into a ring buffer; frame parsing stays in the normal
+  // display background task.
+  USART_CTL0(USART1_BASE) = BIT(13) | BIT(5) | BIT(3) | BIT(2);
+
+  // USART1 on the GD32F205 APB1 serial block uses Cortex-M external IRQ 38.
+  NVIC_ISER(1) = BIT(6);
 }
 
 static void initialize_display_board_gpio(void)
@@ -839,8 +853,10 @@ static void service_mainboard_serial_link(void)
       break;
     }
 
-    const uint8_t value = display_mainboard_serial_read_byte();
-    if (value == MAINBOARD_SERIAL_HEARTBEAT_BYTE)
+    const rs232_display_protocol_message_t message = rs232_display_protocol_receive_byte(
+        &mainboard_serial_parser,
+        display_mainboard_serial_read_byte());
+    if (message == RS232_DISPLAY_PROTOCOL_MESSAGE_HEARTBEAT)
     {
       last_mainboard_heartbeat_ms = monotonic_milliseconds;
       set_mainboard_link_state(DISPLAY_LINK_STATE_OK);
@@ -962,6 +978,7 @@ void display_initialize_hardware(void)
   delay_ms(80);
   mainboard_link_state = DISPLAY_LINK_STATE_WAITING;
   last_mainboard_heartbeat_ms = monotonic_milliseconds;
+  rs232_display_protocol_initialize_parser(&mainboard_serial_parser);
   initialize_lcd_controller();
 
   encoder_state = encoder_sample();
@@ -993,12 +1010,14 @@ void display_wait_for_scheduler_tick(void)
 
 bool display_mainboard_serial_byte_available(void)
 {
-  return (USART_STAT(USART1_BASE) & BIT(5)) != 0; // RBNE
+  return circular_buffer_count(&mainboard_serial_rx_buffer) > 0;
 }
 
 uint8_t display_mainboard_serial_read_byte(void)
 {
-  return (uint8_t)USART_DATA(USART1_BASE);
+  uint8_t value = 0;
+  (void)circular_buffer_read(&mainboard_serial_rx_buffer, &value, 1);
+  return value;
 }
 
 bool display_mainboard_serial_transmit_ready(void)
@@ -1009,4 +1028,17 @@ bool display_mainboard_serial_transmit_ready(void)
 void display_mainboard_serial_write_byte(uint8_t value)
 {
   USART_DATA(USART1_BASE) = value;
+}
+
+void USART1_IRQHandler(void)
+{
+  while ((USART_STAT(USART1_BASE) & BIT(5)) != 0) // RBNE
+  {
+    const uint8_t value = (uint8_t)USART_DATA(USART1_BASE);
+    if (circular_buffer_count(&mainboard_serial_rx_buffer) <
+        MAINBOARD_SERIAL_RX_BUFFER_SIZE - 1u)
+    {
+      (void)circular_buffer_write(&mainboard_serial_rx_buffer, &value, 1);
+    }
+  }
 }
