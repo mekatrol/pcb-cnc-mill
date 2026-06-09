@@ -21,6 +21,9 @@
 - Do not rewrite unrelated files.
 - Do not delete user work.
 - Do not use destructive git commands unless user asks.
+- Reuse constants where possible. If two files depend on the same hardware
+  value, protocol value, timing value, or buffer limit, define it once in the
+  narrowest shared header or config file and include that definition.
 - Keep code split by feature or function. Entry point files such as `main.c`
   should wire startup and loops only; scheduler, timer, parser, planner,
   display, input, and driver behavior should live in their own files.
@@ -44,6 +47,9 @@
 - Keep parser, planner, and hardware layers separate.
 - Shared runtime code belongs under `firmware/core/runtime/` unless there is a
   stronger feature-specific home.
+- Code that is common to mainboard, display, and toolhead firmware should move
+  to `firmware/core/` or a shared driver folder, then all board users should be
+  updated to call the common implementation instead of keeping local copies.
 - Add verbose comments for low-level firmware, scheduler, timer, interrupt,
   hardware register, and shared runtime code. Public structures, structure
   fields, callback types, and function headers should explain ownership, units,

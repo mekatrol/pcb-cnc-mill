@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "circular_buffer.h"
+#include "board_clock.h"
 #include "display_hal.h"
 #include "display_render.h"
 #include "registers.h"
@@ -10,8 +10,6 @@
 
 enum
 {
-  SYSTEM_CORE_CLOCK_HZ = 120000000,
-  SYSTEM_CORE_CLOCK_MHZ = 120,
   DELAY_LOOP_CYCLES_PER_US = 45,
   ENCODER_A_PIN = 8,   // Upstream BTT TFT35 V3.0: LCD_ENCA_PIN PA8
   ENCODER_B_PIN = 9,   // Upstream BTT TFT35 V3.0: LCD_ENCB_PIN PC9
@@ -25,13 +23,8 @@ enum
   TOUCH_MISO_PIN = 4,  // Upstream BTT TFT35 V3.0: XPT2046_MISO PE4
   TOUCH_MOSI_PIN = 3,  // Upstream BTT TFT35 V3.0: XPT2046_MOSI PE3
   TOUCH_PEN_PIN = 13,  // Upstream BTT TFT35 V3.0: XPT2046_TPEN PC13
-  MAINBOARD_SERIAL_TX_PIN = 2, // TFT35 RS232 connector: PA2 / USART1_TX
-  MAINBOARD_SERIAL_RX_PIN = 3, // TFT35 RS232 connector: PA3 / USART1_RX
-  MAINBOARD_SERIAL_BAUD = 115200,
   MAINBOARD_SERIAL_RECEIVE_BYTES_PER_SERVICE = 32,
-  MAINBOARD_SERIAL_RX_BUFFER_SIZE = 2048,
   MAINBOARD_SERIAL_LINK_TIMEOUT_MS = 1500,
-  APB1_PERIPHERAL_CLOCK_HZ = SYSTEM_CORE_CLOCK_HZ / 2u,
   KNOB_LED_PIXELS = 2, // Upstream GD TFT35 E3 V3.0: NEOPIXEL_PIXELS 2
   // Match upstream Knob_LED.c's integer math with the 120 MHz APB1 timer.
   NEOPIXEL_TIMER_PERIOD_TICKS = 150,
@@ -39,7 +32,6 @@ enum
   NEOPIXEL_T1H_TICKS = 128,
   EXMC_ADDRESS_SETUP_TICKS = 15,
   EXMC_DATA_SETUP_TICKS = 255,
-  SYSTICK_RELOAD_TICKS = SYSTEM_CORE_CLOCK_HZ / 1000u,
 };
 
 typedef enum
@@ -66,10 +58,9 @@ static runtime_chirp_t buzzer_chirp;
 static display_link_state_t mainboard_link_state = DISPLAY_LINK_STATE_WAITING;
 static uint32_t last_mainboard_heartbeat_ms;
 static rs232_display_protocol_parser_t mainboard_serial_parser;
-static circular_buffer_t mainboard_serial_rx_buffer;
-static uint8_t mainboard_serial_rx_buffer_storage[MAINBOARD_SERIAL_RX_BUFFER_SIZE];
 
 static void knob_led_set_enabled(bool enabled);
+void mainboard_serial_usart1_init(void);
 
 void SysTick_Handler(void)
 {
@@ -102,7 +93,7 @@ static uint32_t display_get_monotonic_microseconds(void)
   uint32_t current_tick_count;
   uint32_t after_milliseconds;
 
-  // SysTick counts down from SYSTICK_RELOAD_TICKS - 1 to zero once per
+  // SysTick counts down from DISPLAY_SYSTICK_RELOAD_TICKS - 1 to zero once per
   // millisecond. Read the millisecond counter before and after the down-counter
   // so a wrap during this function does not combine the old millisecond with
   // the new sub-millisecond position.
@@ -113,8 +104,8 @@ static uint32_t display_get_monotonic_microseconds(void)
     after_milliseconds = monotonic_milliseconds;
   } while (before_milliseconds != after_milliseconds);
 
-  const uint32_t elapsed_ticks = SYSTICK_RELOAD_TICKS - current_tick_count;
-  const uint32_t elapsed_microseconds = elapsed_ticks / SYSTEM_CORE_CLOCK_MHZ;
+  const uint32_t elapsed_ticks = DISPLAY_SYSTICK_RELOAD_TICKS - current_tick_count;
+  const uint32_t elapsed_microseconds = elapsed_ticks / DISPLAY_SYSTEM_CORE_CLOCK_MHZ;
 
   return before_milliseconds * 1000u + elapsed_microseconds;
 }
@@ -473,47 +464,16 @@ static void initialize_clocks_for_display_board(void)
 
   // Enable EXMC so the LCD can be written through the memory-mapped bus.
   RCU_AHB1EN |= BIT(8);
-  RCU_APB1EN |= BIT(4) | // TIMER5 for NeoPixel bit timing
-                BIT(17); // USART1 for the RS232 link to the mainboard
+  RCU_APB1EN |= BIT(4); // TIMER5 for NeoPixel bit timing
   (void)RCU_APB2EN;
   (void)RCU_AHB1EN;
   (void)RCU_APB1EN;
 
-  SYST_RVR = SYSTICK_RELOAD_TICKS - 1u;
+  SYST_RVR = DISPLAY_SYSTICK_RELOAD_TICKS - 1u;
   SYST_CVR = 0;
   SYST_CSR = BIT(0) | BIT(1) | BIT(2);
   interrupts_enable();
   knob_led_timer_init();
-}
-
-static void initialize_mainboard_serial_link(void)
-{
-  // The TFT35 E3 RS232 connector is a board-level 5-wire serial link to the
-  // mainboard. On the GD32F205 variant, that connector uses PA2/PA3 on
-  // USART1, with normal 3.3 V UART signalling behind BTT's connector label.
-  configure_gpio_pin_mode(GPIOA_BASE, MAINBOARD_SERIAL_TX_PIN, 0xBu);
-  configure_gpio_pin_mode(GPIOA_BASE, MAINBOARD_SERIAL_RX_PIN, 0x8u);
-  gpio_output_set(GPIOA_BASE, MAINBOARD_SERIAL_RX_PIN, true);
-
-  USART_CTL0(USART1_BASE) = 0;
-  USART_CTL1(USART1_BASE) = 0;
-  USART_CTL2(USART1_BASE) = 0;
-  USART_BAUD(USART1_BASE) = (APB1_PERIPHERAL_CLOCK_HZ + (MAINBOARD_SERIAL_BAUD / 2u)) /
-                            MAINBOARD_SERIAL_BAUD;
-
-  circular_buffer_init(
-      &mainboard_serial_rx_buffer,
-      mainboard_serial_rx_buffer_storage,
-      sizeof(mainboard_serial_rx_buffer_storage));
-
-  // Enable 8 data bits, no parity, one stop bit, transmitter, receiver,
-  // receive-not-empty interrupt, and the USART peripheral itself. The interrupt
-  // only moves raw bytes into a ring buffer; frame parsing stays in the normal
-  // display background task.
-  USART_CTL0(USART1_BASE) = BIT(13) | BIT(5) | BIT(3) | BIT(2);
-
-  // USART1 on the GD32F205 APB1 serial block uses Cortex-M external IRQ 38.
-  NVIC_ISER(1) = BIT(6);
 }
 
 static void initialize_display_board_gpio(void)
@@ -551,7 +511,7 @@ static void initialize_display_board_gpio(void)
   gpio_output_set(GPIOC_BASE, ENCODER_B_PIN, true);
   gpio_output_set(GPIOC_BASE, ENCODER_BTN_PIN, true);
 
-  initialize_mainboard_serial_link();
+  mainboard_serial_usart1_init();
 }
 
 static void configure_lcd_external_memory_bus_pin(uint32_t base, uint8_t pin)
@@ -1006,39 +966,4 @@ void display_wait_for_scheduler_tick(void)
   }
 
   delay_ms(1);
-}
-
-bool display_mainboard_serial_byte_available(void)
-{
-  return circular_buffer_count(&mainboard_serial_rx_buffer) > 0;
-}
-
-uint8_t display_mainboard_serial_read_byte(void)
-{
-  uint8_t value = 0;
-  (void)circular_buffer_read(&mainboard_serial_rx_buffer, &value, 1);
-  return value;
-}
-
-bool display_mainboard_serial_transmit_ready(void)
-{
-  return (USART_STAT(USART1_BASE) & BIT(7)) != 0; // TBE
-}
-
-void display_mainboard_serial_write_byte(uint8_t value)
-{
-  USART_DATA(USART1_BASE) = value;
-}
-
-void USART1_IRQHandler(void)
-{
-  while ((USART_STAT(USART1_BASE) & BIT(5)) != 0) // RBNE
-  {
-    const uint8_t value = (uint8_t)USART_DATA(USART1_BASE);
-    if (circular_buffer_count(&mainboard_serial_rx_buffer) <
-        MAINBOARD_SERIAL_RX_BUFFER_SIZE - 1u)
-    {
-      (void)circular_buffer_write(&mainboard_serial_rx_buffer, &value, 1);
-    }
-  }
 }
