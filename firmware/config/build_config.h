@@ -9,4 +9,4 @@
 // If the HAL supports printing diagnostic messages then set DIAG_PRINT_SUPPORTED to non-zero
 #define DIAG_PRINT_SUPPORTED true
 
-#endif  // __CONFIG_H__
+#endif // __CONFIG_H__

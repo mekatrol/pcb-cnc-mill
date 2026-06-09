@@ -41,7 +41,7 @@ void mainboard_initialize_hardware(void)
 {
   // Intialise board clock configuration
   clock_init();
-  
+
   // Intialise GPIO
   init_gpio();
 

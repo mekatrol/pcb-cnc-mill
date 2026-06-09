@@ -16,4 +16,4 @@
 // Extract endpoint packet size
 #define USB_EP_PACKET_SIZE(packet_size) (((uint32_t)(packet_size)) & USB_EP_PACKET_SIZE_MASK)
 
-#endif  // __USB_MACROS_H__
+#endif // __USB_MACROS_H__

@@ -37,13 +37,13 @@ void tft_usart2_init()
   RCC->CCIPR &= ~RCC_CCIPR_USART2SEL;
 
   usart_init_hal(
-      &usart2_instance,      // The usart instance data
-      GPIOA,                 // The GPIO port the usart is on
-      BIT_02_POS,            // The GPIO TX pin
-      BIT_03_POS,            // The GPIO rx pin
-      &RCC->APBENR1,         // The USART peripheral clock enable register
-      RCC_APBENR1_USART2EN,  // The USART enable bit
-      USART2_LPUART2_IRQn    // The usart IRQ number
+      &usart2_instance,     // The usart instance data
+      GPIOA,                // The GPIO port the usart is on
+      BIT_02_POS,           // The GPIO TX pin
+      BIT_03_POS,           // The GPIO rx pin
+      &RCC->APBENR1,        // The USART peripheral clock enable register
+      RCC_APBENR1_USART2EN, // The USART enable bit
+      USART2_LPUART2_IRQn   // The usart IRQ number
   );
 }
 

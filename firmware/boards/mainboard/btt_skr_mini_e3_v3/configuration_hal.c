@@ -6,13 +6,15 @@
 uint8_t at24c32_read_byte(uint16_t mem_addr);
 void at24c32_write_byte(uint16_t mem_addr, uint8_t data);
 
-uint32_t config_get_version() {
+uint32_t config_get_version()
+{
   uint8_t key_high = at24c32_read_byte(0);
   uint8_t key_low = at24c32_read_byte(1);
 
   // The the expected config key is not correct then return invalid version
   // to signal that the eeprom needs to be reset
-  if (key_high != PERSIST_KEY_HIGH || key_low != PERSIST_KEY_LOW) {
+  if (key_high != PERSIST_KEY_HIGH || key_low != PERSIST_KEY_LOW)
+  {
     return CONFIG_INVALID_VERSION;
   }
 
@@ -26,7 +28,8 @@ uint32_t config_get_version() {
   return ver_major_high << 24 | ver_major_low << 16 | ver_minor_high << 8 | ver_minor_low;
 }
 
-bool config_reset(config_interface_t* config) {
+bool config_reset(config_interface_t *config)
+{
   // Write key
   at24c32_write_byte(0, PERSIST_KEY_HIGH);
   at24c32_write_byte(1, PERSIST_KEY_LOW);

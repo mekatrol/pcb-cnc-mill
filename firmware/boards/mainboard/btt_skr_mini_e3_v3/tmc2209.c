@@ -6,20 +6,20 @@
 #include "timers.h"
 
 // TMC2209 Register Addresses
-#define TMC2209_REG_GCONF 0x00         // General configuration
-#define TMC2209_REG_GSTAT 0x01         // Global status
-#define TMC2209_REG_IFCNT 0x02         // Interface transmission counter
-#define TMC2209_REG_NODECONF 0x03      // Slave configuration
-#define TMC2209_REG_OTP_WRITE 0x04     // Write OTP
-#define TMC2209_REG_OTP_READ 0x05      // Read OTP
-#define TMC2209_REG_IOIN 0x06          // Input/output status
-#define TMC2209_REG_FACTORY_CONF 0x07  // Read factory configuration
-#define TMC2209_REG_IHOLD_IRUN 0x10    // Current control (hold/run/boost)
-#define TMC2209_REG_TPOWERDOWN 0x11    // Power-down delay
-#define TMC2209_REG_TSTEP 0x12         // Step delay
-#define TMC2209_REG_TPWMTHRS 0x13      // StealthChop activation threshold
-#define TMC2209_REG_TCOOLTHRS 0x14     // CoolStep activation threshold
-#define TMC2209_REG_THIGH 0x15         // Upper velocity threshold for CoolStep
+#define TMC2209_REG_GCONF 0x00        // General configuration
+#define TMC2209_REG_GSTAT 0x01        // Global status
+#define TMC2209_REG_IFCNT 0x02        // Interface transmission counter
+#define TMC2209_REG_NODECONF 0x03     // Slave configuration
+#define TMC2209_REG_OTP_WRITE 0x04    // Write OTP
+#define TMC2209_REG_OTP_READ 0x05     // Read OTP
+#define TMC2209_REG_IOIN 0x06         // Input/output status
+#define TMC2209_REG_FACTORY_CONF 0x07 // Read factory configuration
+#define TMC2209_REG_IHOLD_IRUN 0x10   // Current control (hold/run/boost)
+#define TMC2209_REG_TPOWERDOWN 0x11   // Power-down delay
+#define TMC2209_REG_TSTEP 0x12        // Step delay
+#define TMC2209_REG_TPWMTHRS 0x13     // StealthChop activation threshold
+#define TMC2209_REG_TCOOLTHRS 0x14    // CoolStep activation threshold
+#define TMC2209_REG_THIGH 0x15        // Upper velocity threshold for CoolStep
 
 // Direct coil control
 #define TMC2209_REG_XDIRECT 0x20
@@ -45,11 +45,12 @@
 
 // StealthChop and diagnostics
 #define TMC2209_REG_PWMCONF 0x7A
-#define TMC2209_REG_PWM_SCALE 0x7B  // Read-only
+#define TMC2209_REG_PWM_SCALE 0x7B // Read-only
 #define TMC2209_REG_ENCM_CTRL 0x7C
 #define TMC2209_REG_LOST_STEPS 0x7D
 
-typedef enum {
+typedef enum
+{
   STATE_INIT_BEGIN = 0,
   STATE_INIT_X = STATE_INIT_BEGIN + 1,
   STATE_INIT_Y = STATE_INIT_X + 1,
@@ -63,7 +64,7 @@ typedef enum {
 #define TMC2209_BAUD_RATE 115200
 
 // TMC2209 RX buffer
-#define TMC2209_RX_BUFFER_SIZE 16  // Characters are echoed (so rx buffer size should be twice maximum message length)
+#define TMC2209_RX_BUFFER_SIZE 16 // Characters are echoed (so rx buffer size should be twice maximum message length)
 static uint8_t tmc2209_rx_buffer[TMC2209_RX_BUFFER_SIZE];
 
 // TMC2209 TX buffer
@@ -85,7 +86,8 @@ static usart_instance_t serial_buffer = {
 
     /**/};
 
-void tmc2209_uart4_init() {
+void tmc2209_uart4_init()
+{
   // Enable USART4 clocks
   RCC->APBENR1 |= RCC_APBENR1_USART4EN;
 
@@ -97,96 +99,110 @@ void tmc2209_uart4_init() {
   GPIOC->AFR[1] |= ((GPIO_AF1 << ((BIT_10_POS - 8) * GPIO_AF_BIT_COUNT)) | (GPIO_AF1 << ((BIT_11_POS - 8) * GPIO_AF_BIT_COUNT)));
 
   // Configure USART4 (8-bit data, 1 stop bit)
-  USART4->CR1 &= ~USART_CR1_UE;                             // Disable USART
-  USART4->BRR = USART_BRR(F_SYS_CLOCK, TMC2209_BAUD_RATE);  // Set baud rate
-  USART4->CR1 =                                             //
-      USART_CR1_TE | USART_CR1_RE |                         // Enable transmit and receive
-      USART_CR1_TXEIE_TXFNFIE | USART_CR1_RXNEIE_RXFNEIE;   // Enable interrupts
-  USART4->CR3 = 0;                                          // No half-duplex
-  USART4->CR1 |= USART_CR1_UE;                              // Enable USART
+  USART4->CR1 &= ~USART_CR1_UE;                            // Disable USART
+  USART4->BRR = USART_BRR(F_SYS_CLOCK, TMC2209_BAUD_RATE); // Set baud rate
+  USART4->CR1 =                                            //
+      USART_CR1_TE | USART_CR1_RE |                        // Enable transmit and receive
+      USART_CR1_TXEIE_TXFNFIE | USART_CR1_RXNEIE_RXFNEIE;  // Enable interrupts
+  USART4->CR3 = 0;                                         // No half-duplex
+  USART4->CR1 |= USART_CR1_UE;                             // Enable USART
 
   // Enable USART4 interrupt in NVIC
   NVIC_EnableIRQ(USART3_4_5_6_LPUART1_IRQn);
 }
 
-void USART3_4_LPUART1_IRQHandler() {
+void USART3_4_LPUART1_IRQHandler()
+{
   usart_irq_handler(&serial_buffer);
 }
 
-uint8_t tmc2209_crc8(uint8_t *data, uint8_t length) {
+uint8_t tmc2209_crc8(uint8_t *data, uint8_t length)
+{
   uint8_t crc = 0;
   uint8_t currentByte;
 
-  for (uint8_t i = 0; i < length; i++) {  // Execute for all bytes of a message
-    currentByte = data[i];                // Retrieve a byte to be sent from Array
-    for (uint8_t j = 0; j < 8; j++) {
-      if ((crc >> 7) ^ (currentByte & 0x01))  // update CRC based result of XOR operation
+  for (uint8_t i = 0; i < length; i++)
+  {                        // Execute for all bytes of a message
+    currentByte = data[i]; // Retrieve a byte to be sent from Array
+    for (uint8_t j = 0; j < 8; j++)
+    {
+      if ((crc >> 7) ^ (currentByte & 0x01)) // update CRC based result of XOR operation
       {
         crc = (crc << 1) ^ 0x07;
-      } else {
+      }
+      else
+      {
         crc = (crc << 1);
       }
       currentByte = currentByte >> 1;
-    }  // for CRC bit
-  }  // for message byte
+    } // for CRC bit
+  } // for message byte
 
   return crc;
 }
 
 // Reference: TMC2209 DATASHEET (Rev. 1.09 / 2023-FEB-16)
 // Section:   4.1.1 Write Access
-void tmc2209_send_write_reg(uint8_t addr, uint8_t reg, uint32_t data) {
+void tmc2209_send_write_reg(uint8_t addr, uint8_t reg, uint32_t data)
+{
   usart_clear_buffers(&serial_buffer);
 
   uint8_t packet[8];
-  packet[0] = 0x05;                     // Sync nibble
-  packet[1] = addr;                     // Device addr
-  packet[2] = reg | 0x80;               // Register address with write bit set
-  packet[3] = (data >> 24) & 0xFF;      // MSB
-  packet[4] = (data >> 16) & 0xFF;      //
-  packet[5] = (data >> 8) & 0xFF;       //
-  packet[6] = (data >> 0) & 0xFF;       // LSB
-  packet[7] = tmc2209_crc8(packet, 7);  // CRC
+  packet[0] = 0x05;                    // Sync nibble
+  packet[1] = addr;                    // Device addr
+  packet[2] = reg | 0x80;              // Register address with write bit set
+  packet[3] = (data >> 24) & 0xFF;     // MSB
+  packet[4] = (data >> 16) & 0xFF;     //
+  packet[5] = (data >> 8) & 0xFF;      //
+  packet[6] = (data >> 0) & 0xFF;      // LSB
+  packet[7] = tmc2209_crc8(packet, 7); // CRC
 
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 8; i++)
+  {
     usart_send(&serial_buffer, packet[i]);
   }
 }
 
 // This helper waits till data actually sent before returning
-void tmc2209_send_write_reg_with_wait(uint8_t addr, uint8_t reg, uint32_t data) {
+void tmc2209_send_write_reg_with_wait(uint8_t addr, uint8_t reg, uint32_t data)
+{
   tmc2209_send_write_reg(addr, reg, data);
-  usart_wait_data_sent(&serial_buffer);  // TMC2209 does not reply to writes, so need to make sure data is sent before continuing
+  usart_wait_data_sent(&serial_buffer); // TMC2209 does not reply to writes, so need to make sure data is sent before continuing
 }
 
 // Reference: TMC2209 DATASHEET (Rev. 1.09 / 2023-FEB-16)
 // Section:   4.1.2 Read Access
-void tmc2209_send_read_reg(uint8_t addr, uint8_t reg) {
+void tmc2209_send_read_reg(uint8_t addr, uint8_t reg)
+{
   usart_clear_buffers(&serial_buffer);
 
   uint8_t packet[4];
-  packet[0] = 0x05;                     // Sync nibble
-  packet[1] = addr;                     // Device addr with write bit clear
-  packet[2] = reg;                      // Register address
-  packet[3] = tmc2209_crc8(packet, 3);  // CRC
+  packet[0] = 0x05;                    // Sync nibble
+  packet[1] = addr;                    // Device addr with write bit clear
+  packet[2] = reg;                     // Register address
+  packet[3] = tmc2209_crc8(packet, 3); // CRC
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++)
+  {
     usart_send(&serial_buffer, packet[i]);
   }
 }
 
-int tmc2209_parse_response(uint8_t sent_count, uint8_t *data_out, uint8_t reg) {
+int tmc2209_parse_response(uint8_t sent_count, uint8_t *data_out, uint8_t reg)
+{
   // Note, as the E3 Mini uses one wire on RX4 then the transmitted bytes will be echoed
   // via the one wire resitor, so we need to ignore first 'sent_count' bytes of received data (because we transmitted it)
 
   // Need the sent count plus expected rx count of 8
-  if (!usart_wait_for_count(&serial_buffer, sent_count + 8, 100)) {
+  if (!usart_wait_for_count(&serial_buffer, sent_count + 8, 100))
+  {
     // Not enough data
     return -1;
   }
 
   // We need to remove echoed bytes
-  while (sent_count--) {
+  while (sent_count--)
+  {
     usart_read(&serial_buffer);
   }
 
@@ -194,19 +210,22 @@ int tmc2209_parse_response(uint8_t sent_count, uint8_t *data_out, uint8_t reg) {
   uint8_t rx_data_index = 0;
 
   // Check sync
-  if ((usart_read(&serial_buffer) & 0xFF) != 0x05) {
+  if ((usart_read(&serial_buffer) & 0xFF) != 0x05)
+  {
     return -2;
   }
   rx_data[rx_data_index++] = 0x05;
 
   // Check addr is 0xFF which is reserved for responses to master
-  if ((usart_read(&serial_buffer) & 0xFF) != 0xFF) {
+  if ((usart_read(&serial_buffer) & 0xFF) != 0xFF)
+  {
     return -3;
   }
   rx_data[rx_data_index++] = 0xFF;
 
   // Check register
-  if ((usart_read(&serial_buffer) & 0xFF) != reg) {
+  if ((usart_read(&serial_buffer) & 0xFF) != reg)
+  {
     return -4;
   }
   rx_data[rx_data_index++] = reg;
@@ -222,25 +241,29 @@ int tmc2209_parse_response(uint8_t sent_count, uint8_t *data_out, uint8_t reg) {
 
   // Check CRC
   uint8_t calc_crc = tmc2209_crc8(rx_data, 7);
-  if (crc != calc_crc) {
-    return -5;  // Bad CRC
+  if (crc != calc_crc)
+  {
+    return -5; // Bad CRC
   }
 
   // Copy 4-byte GCONF register value (LSB first)
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++)
+  {
     data_out[i] = rx_data[3 + i];
   }
 
   return 0;
 }
 
-uint32_t tmc2209_read_reg(uint8_t addr, uint8_t reg) {
+uint32_t tmc2209_read_reg(uint8_t addr, uint8_t reg)
+{
   tmc2209_send_read_reg(addr, reg);
 
   uint8_t value_bytes[4];
   uint32_t value = 0;
   int result = tmc2209_parse_response(4, value_bytes, reg);
-  if (result == 0) {
+  if (result == 0)
+  {
     value = (value_bytes[0] << 24) |
             (value_bytes[1] << 16) |
             (value_bytes[2] << 8) |
@@ -250,7 +273,8 @@ uint32_t tmc2209_read_reg(uint8_t addr, uint8_t reg) {
   return value;
 }
 
-bool tmc2209_gstat_init(uint8_t addr) {
+bool tmc2209_gstat_init(uint8_t addr)
+{
   // Read ifcnt before writing to identify if write was successful
   uint32_t ifcnt_before = tmc2209_read_reg(addr, TMC2209_REG_IFCNT);
 
@@ -261,7 +285,8 @@ bool tmc2209_gstat_init(uint8_t addr) {
   return tmc2209_read_reg(addr, TMC2209_REG_IFCNT) > ifcnt_before;
 }
 
-bool tmc2209_hold_run_init(uint8_t addr) {
+bool tmc2209_hold_run_init(uint8_t addr)
+{
   // Read ifcnt before writing to identify if write was successful
   uint32_t ifcnt_before = tmc2209_read_reg(addr, TMC2209_REG_IFCNT);
 
@@ -277,7 +302,8 @@ bool tmc2209_hold_run_init(uint8_t addr) {
   return tmc2209_read_reg(addr, TMC2209_REG_IFCNT) > ifcnt_before;
 }
 
-bool tmc2209_gconf_init(uint8_t addr) {
+bool tmc2209_gconf_init(uint8_t addr)
+{
   // Read current gconf value
   uint32_t gconf = tmc2209_read_reg(addr, TMC2209_REG_GCONF);
 
@@ -307,7 +333,8 @@ bool tmc2209_gconf_init(uint8_t addr) {
   return tmc2209_read_reg(addr, TMC2209_REG_IFCNT) > ifcnt_before;
 }
 
-bool tmc2209_mstep_init(uint8_t addr) {
+bool tmc2209_mstep_init(uint8_t addr)
+{
   // Read current chopconf value
   uint32_t chopconf = tmc2209_read_reg(addr, TMC2209_REG_CHOPCONF);
 
@@ -335,7 +362,7 @@ bool tmc2209_mstep_init(uint8_t addr) {
   // eg: 200 steps ×  16 microsteps =  3,200 microsteps per revolution
 
   // Set MRES = 0b0100 (1/16 microstepping)
-  chopconf = (chopconf & ~(0xF << BIT_24_POS)) | (0b0100 << BIT_24_POS);  // Reset current and set new MRES in chopcong
+  chopconf = (chopconf & ~(0xF << BIT_24_POS)) | (0b0100 << BIT_24_POS); // Reset current and set new MRES in chopcong
 
   // Write the updated gconf value
   tmc2209_send_write_reg_with_wait(addr, TMC2209_REG_CHOPCONF, chopconf);
@@ -344,7 +371,8 @@ bool tmc2209_mstep_init(uint8_t addr) {
   return tmc2209_read_reg(addr, TMC2209_REG_IFCNT) > ifcnt_before;
 }
 
-void tmc2209_device_initialise(uint8_t addr) {
+void tmc2209_device_initialise(uint8_t addr)
+{
   diag_printf("Initialising TMC2209 device at address: 0x%x\r\n", addr);
 
   // Reset status
@@ -371,54 +399,60 @@ TMC2209_Initialise_State init_state = STATE_INIT_X;
 int32_t stepper_cooling_fan_run_on_start = 0;
 uint32_t prev_seconds_count = 0;
 
-void tmc2209_state_initialise(uint32_t /*elapsed_ms*/, uint32_t elapsed_sec) {
-  switch (init_state) {
-    case STATE_INIT_BEGIN:
-      prev_seconds_count = elapsed_sec;
-      stepper_cooling_fan_run_on_start = 0;
-      init_state = STATE_INIT_X;
-      break;
+void tmc2209_state_initialise(uint32_t /*elapsed_ms*/, uint32_t elapsed_sec)
+{
+  switch (init_state)
+  {
+  case STATE_INIT_BEGIN:
+    prev_seconds_count = elapsed_sec;
+    stepper_cooling_fan_run_on_start = 0;
+    init_state = STATE_INIT_X;
+    break;
 
-    case STATE_INIT_X:
-      tmc2209_device_initialise(0x00);
-      init_state = STATE_INIT_Y;
-      break;
+  case STATE_INIT_X:
+    tmc2209_device_initialise(0x00);
+    init_state = STATE_INIT_Y;
+    break;
 
-    case STATE_INIT_Y:
-      tmc2209_device_initialise(0x01);
-      init_state = STATE_INIT_Z;
-      break;
+  case STATE_INIT_Y:
+    tmc2209_device_initialise(0x01);
+    init_state = STATE_INIT_Z;
+    break;
 
-    case STATE_INIT_Z:
-      tmc2209_device_initialise(0x02);
-      init_state = STATE_INIT_E;
-      break;
+  case STATE_INIT_Z:
+    tmc2209_device_initialise(0x02);
+    init_state = STATE_INIT_E;
+    break;
 
-    case STATE_INIT_E:
-      tmc2209_device_initialise(0x03);
-      init_state = STATE_INIT_DONE;
-      // steppers_enable_hal(true);
-      break;
+  case STATE_INIT_E:
+    tmc2209_device_initialise(0x03);
+    init_state = STATE_INIT_DONE;
+    // steppers_enable_hal(true);
+    break;
 
-    case STATE_INIT_DONE:
-    default:
-      // Should never occur, but in case it does just set as done and continue
-      init_state = STATE_INIT_DONE;
-      break;
+  case STATE_INIT_DONE:
+  default:
+    // Should never occur, but in case it does just set as done and continue
+    init_state = STATE_INIT_DONE;
+    break;
   }
 }
 
-#define STEPPER_COOLING_RUN_ON_TIME 10  // 60 seconds
+#define STEPPER_COOLING_RUN_ON_TIME 10 // 60 seconds
 
-void tmc2209_tick(uint32_t elapsed_ms, uint32_t elapsed_sec) {
-  if (init_state != STATE_INIT_DONE) {
+void tmc2209_tick(uint32_t elapsed_ms, uint32_t elapsed_sec)
+{
+  if (init_state != STATE_INIT_DONE)
+  {
     tmc2209_state_initialise(elapsed_ms, elapsed_sec);
   }
 
-  if (stepper_cooling_fan_run_on_start > 0) {
-    if ((uint32_t)(elapsed_sec - stepper_cooling_fan_run_on_start) >= STEPPER_COOLING_RUN_ON_TIME) {
+  if (stepper_cooling_fan_run_on_start > 0)
+  {
+    if ((uint32_t)(elapsed_sec - stepper_cooling_fan_run_on_start) >= STEPPER_COOLING_RUN_ON_TIME)
+    {
       stepper_cooling_fan_run_on_start = 0;
-      GPIOC->BSRR = BIT_06 << 16;  // Turn Fan 0 off
+      GPIOC->BSRR = BIT_06 << 16; // Turn Fan 0 off
     }
   }
 }

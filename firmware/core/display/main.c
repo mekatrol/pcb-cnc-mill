@@ -12,28 +12,28 @@ static void display_buzzer_service_task(void)
 }
 
 static runtime_scheduler_task_t display_tasks[] = {
-  {
-    .name = "display-background-service",
-    .period_milliseconds = 1u,
-    .priority = 10u,
-    .enabled = true,
-    .next_run_milliseconds = 0u,
-    .callback = display_background_service_task,
-  },
-  {
-    .name = "display-buzzer-service",
-    .period_milliseconds = 0u,
-    .priority = 20u,
-    .enabled = true,
-    .next_run_milliseconds = 0u,
-    .callback = display_buzzer_service_task,
-  },
+    {
+        .name = "display-background-service",
+        .period_milliseconds = 1u,
+        .priority = 10u,
+        .enabled = true,
+        .next_run_milliseconds = 0u,
+        .callback = display_background_service_task,
+    },
+    {
+        .name = "display-buzzer-service",
+        .period_milliseconds = 0u,
+        .priority = 20u,
+        .enabled = true,
+        .next_run_milliseconds = 0u,
+        .callback = display_buzzer_service_task,
+    },
 };
 
 static runtime_scheduler_t display_scheduler = {
-  .tasks = display_tasks,
-  .task_count = sizeof(display_tasks) / sizeof(display_tasks[0]),
-  .get_monotonic_milliseconds = display_get_monotonic_milliseconds,
+    .tasks = display_tasks,
+    .task_count = sizeof(display_tasks) / sizeof(display_tasks[0]),
+    .get_monotonic_milliseconds = display_get_monotonic_milliseconds,
 };
 
 int main(void)

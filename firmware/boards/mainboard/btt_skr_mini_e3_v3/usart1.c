@@ -43,13 +43,13 @@ void diag_usart1_init()
   RCC->CCIPR &= ~RCC_CCIPR_USART1SEL;
 
   usart_init_hal(
-      &usart1_instance,      // The usart instance data
-      GPIOA,                 // The GPIO port the usart is on
-      USART1_TX_PIN,         // The GPIO TX pin
-      USART1_RX_PIN,         // The GPIO rx pin
-      &RCC->APBENR2,         // The USART peripheral clock enable register
-      RCC_APBENR2_USART1EN,  // The USART enable bit
-      USART1_IRQn            // The usart IRQ number
+      &usart1_instance,     // The usart instance data
+      GPIOA,                // The GPIO port the usart is on
+      USART1_TX_PIN,        // The GPIO TX pin
+      USART1_RX_PIN,        // The GPIO rx pin
+      &RCC->APBENR2,        // The USART peripheral clock enable register
+      RCC_APBENR2_USART1EN, // The USART enable bit
+      USART1_IRQn           // The usart IRQ number
   );
 }
 

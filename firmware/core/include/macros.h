@@ -9,4 +9,4 @@
 // IMPORTANT: b must be a power of 2!
 #define IS_MULTIPLE_POW2(a, b) ((((a) & ((b) - 1))) == 0)
 
-#endif  // __MACROS_H__
+#endif // __MACROS_H__

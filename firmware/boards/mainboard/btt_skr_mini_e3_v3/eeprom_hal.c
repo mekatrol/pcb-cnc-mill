@@ -3,7 +3,8 @@
 #include "board_hal.h"
 #include "clock.h"
 
-typedef enum {
+typedef enum
+{
   EE_WRITE = 0,
   EE_READ = 1
 } EEPROM_Command_Type;
@@ -36,15 +37,16 @@ typedef enum {
 //         = 1 / 9.625 µs
 //         ≈ 103.9 kHz
 
-#define I2C_PRESC (1U << 28)    // PRESC = 1
-#define I2C_SCLDEL (11U << 20)  // SCLDEL = 11 (so will be 11 + 1)
-#define I2C_SDADEL (1U << 16)   // SDADEL = 1
-#define I2C_SCLH (125U << 8)    // SCLH   = 125
-#define I2C_SCLL (181U << 0)    // SCLL   = 181
+#define I2C_PRESC (1U << 28)   // PRESC = 1
+#define I2C_SCLDEL (11U << 20) // SCLDEL = 11 (so will be 11 + 1)
+#define I2C_SDADEL (1U << 16)  // SDADEL = 1
+#define I2C_SCLH (125U << 8)   // SCLH   = 125
+#define I2C_SCLL (181U << 0)   // SCLL   = 181
 #define I2C1_TIMINGR (I2C_PRESC | I2C_SCLDEL | I2C_SDADEL | I2C_SCLH | I2C_SCLL)
 
 // I2C1 master init for ~100 kHz
-void i2c1_master_init() {
+void i2c1_master_init()
+{
   // Enable I2C1 clock
   RCC->APBENR1 |= RCC_APBENR1_I2C1EN;
 
@@ -75,9 +77,11 @@ void i2c1_master_init() {
   I2C1->CR1 |= I2C_CR1_PE;
 }
 
-static void i2c1_start(uint8_t addr, uint16_t nbytes, EEPROM_Command_Type transfer_direction) {
+static void i2c1_start(uint8_t addr, uint16_t nbytes, EEPROM_Command_Type transfer_direction)
+{
   // Wait for bus to be free
-  while (I2C1->ISR & I2C_ISR_BUSY);
+  while (I2C1->ISR & I2C_ISR_BUSY)
+    ;
 
   // Reset flags and address
   I2C1->ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF | I2C_ICR_TIMOUTCF | I2C_ICR_ADDRCF;
@@ -105,36 +109,44 @@ static void i2c1_start(uint8_t addr, uint16_t nbytes, EEPROM_Command_Type transf
       I2C_CR2_AUTOEND;
 }
 
-static void i2c1_stop(void) {
+static void i2c1_stop(void)
+{
   // Generate STOP condition
   I2C1->CR2 |= I2C_CR2_STOP;
 
   // Wait for STOPF flag to be set
-  while (!(I2C1->ISR & I2C_ISR_STOPF));
+  while (!(I2C1->ISR & I2C_ISR_STOPF))
+    ;
 
   // Clear STOPF flag by writing 1 to STOPCF in ICR
   I2C1->ICR = I2C_ICR_STOPCF;
 
   // Wait for BUSY to clear (ensures STOP is fully finished)
-  while (I2C1->ISR & I2C_ISR_BUSY);
+  while (I2C1->ISR & I2C_ISR_BUSY)
+    ;
 }
 
-static bool eeprom_ack_polling(void) {
-  uint32_t now = get_sys_tick();  // Get current tick
-  uint32_t expires = now + 100;   // After about 1 second
+static bool eeprom_ack_polling(void)
+{
+  uint32_t now = get_sys_tick(); // Get current tick
+  uint32_t expires = now + 100;  // After about 1 second
 
   // Clear previous flags
   I2C1->ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
 
-  while (get_sys_tick() < expires) {
+  while (get_sys_tick() < expires)
+  {
     I2C1->CR2 = ((AT24C32_ADDR << I2C_CR2_SADD_Pos) |
                  (0 << I2C_CR2_NBYTES_Pos) |
                  I2C_CR2_START);
 
-    while (I2C1->CR2 & I2C_CR2_START);
+    while (I2C1->CR2 & I2C_CR2_START)
+      ;
 
-    if (!(I2C1->ISR & I2C_ISR_NACKF)) {
-      if (I2C1->ISR & I2C_ISR_STOPF) {
+    if (!(I2C1->ISR & I2C_ISR_NACKF))
+    {
+      if (I2C1->ISR & I2C_ISR_STOPF)
+      {
         I2C1->ICR = I2C_ICR_STOPCF;
       }
       return true;
@@ -144,14 +156,17 @@ static bool eeprom_ack_polling(void) {
     I2C1->ICR = I2C_ICR_NACKCF;
 
     // Just sit idle for a bit so we are not hammering get_sys_tick
-    for (int i = 0; i < 100; i++);
+    for (int i = 0; i < 100; i++)
+      ;
   }
 
-  return false;  // timeout or no ACK
+  return false; // timeout or no ACK
 }
 
-static bool i2c1_write_byte(uint8_t b) {
-  if (I2C1->ISR & I2C_ISR_NACKF) {
+static bool i2c1_write_byte(uint8_t b)
+{
+  if (I2C1->ISR & I2C_ISR_NACKF)
+  {
     // Clear the NACK flag
     I2C1->ICR = I2C_ICR_NACKCF;
 
@@ -161,19 +176,23 @@ static bool i2c1_write_byte(uint8_t b) {
   }
 
   // Wait TXDR empty
-  while (!(I2C1->ISR & I2C_ISR_TXIS));
+  while (!(I2C1->ISR & I2C_ISR_TXIS))
+    ;
   I2C1->TXDR = b;
 
   return true;
 }
 
-static uint8_t i2c1_read_byte(void) {
+static uint8_t i2c1_read_byte(void)
+{
   // Wait RXDR full
-  while (!(I2C1->ISR & I2C_ISR_RXNE));
+  while (!(I2C1->ISR & I2C_ISR_RXNE))
+    ;
   return (uint8_t)I2C1->RXDR;
 }
 
-void at24c32_write_byte(uint16_t mem_addr, uint8_t data) {
+void at24c32_write_byte(uint16_t mem_addr, uint8_t data)
+{
   // Start with device at address specified, 3 bytes (2 mem addr + 1 data) and is write mode (read == 0)
   i2c1_start(AT24C32_ADDR, 3, EE_WRITE);
 
@@ -182,7 +201,8 @@ void at24c32_write_byte(uint16_t mem_addr, uint8_t data) {
   i2c1_write_byte(data);
 
   // Wait TX all nbytes data complete
-  while (!(I2C1->ISR & I2C_ISR_STOPF));
+  while (!(I2C1->ISR & I2C_ISR_STOPF))
+    ;
 
   // Release bus
   i2c1_stop();
@@ -192,7 +212,8 @@ void at24c32_write_byte(uint16_t mem_addr, uint8_t data) {
 }
 
 // AT24C32 single‑byte read
-uint8_t at24c32_read_byte(uint16_t mem_addr) {
+uint8_t at24c32_read_byte(uint16_t mem_addr)
+{
   uint8_t val;
 
   // Write mem‑address pointer (no STOP)
@@ -201,7 +222,8 @@ uint8_t at24c32_read_byte(uint16_t mem_addr) {
   i2c1_write_byte((uint8_t)(mem_addr & 0xFF));
 
   // Wait TX all nbytes data complete
-  while (!(I2C1->ISR & I2C_ISR_STOPF));
+  while (!(I2C1->ISR & I2C_ISR_STOPF))
+    ;
 
   // Repeated START + read 1 byte
   i2c1_start(AT24C32_ADDR, 1, EE_READ);
@@ -211,9 +233,10 @@ uint8_t at24c32_read_byte(uint16_t mem_addr) {
   return val;
 }
 
-void init_eeprom(void) {
-  GPIO_SET_MODE(GPIOB, BIT_06_POS, MODER_ALT);  // Set mode to alternate function (AF) on PB6
-  GPIO_SET_MODE(GPIOB, BIT_07_POS, MODER_ALT);  // Set mode to alternate function (AF) on PB7
+void init_eeprom(void)
+{
+  GPIO_SET_MODE(GPIOB, BIT_06_POS, MODER_ALT); // Set mode to alternate function (AF) on PB6
+  GPIO_SET_MODE(GPIOB, BIT_07_POS, MODER_ALT); // Set mode to alternate function (AF) on PB7
 
   // Set open-drain on PB6 & PB7
   GPIOB->OTYPER |= BIT_06 | BIT_07;

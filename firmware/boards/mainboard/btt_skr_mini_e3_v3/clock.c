@@ -9,19 +9,25 @@ volatile uint32_t second_counter_global = 0;
 
 #define HAL_TICK_FREQ_1KHZ 1U
 
-static inline void nvic_set_priority(IRQn_Type IRQn, uint32_t priority) {
-  if ((int32_t)(IRQn) >= 0) {
+static inline void nvic_set_priority(IRQn_Type IRQn, uint32_t priority)
+{
+  if ((int32_t)(IRQn) >= 0)
+  {
     NVIC->IP[_IP_IDX(IRQn)] = ((uint32_t)(NVIC->IP[_IP_IDX(IRQn)] & ~(0xFFUL << _BIT_SHIFT(IRQn))) |
                                (((priority << (8U - __NVIC_PRIO_BITS)) & (uint32_t)0xFFUL) << _BIT_SHIFT(IRQn)));
-  } else {
+  }
+  else
+  {
     SCB->SHP[_SHP_IDX(IRQn)] = ((uint32_t)(SCB->SHP[_SHP_IDX(IRQn)] & ~(0xFFUL << _BIT_SHIFT(IRQn))) |
                                 (((priority << (8U - __NVIC_PRIO_BITS)) & (uint32_t)0xFFUL) << _BIT_SHIFT(IRQn)));
   }
 }
 
-static inline void sys_tick_init(uint32_t ticks) {
-  if ((ticks - 1UL) > SysTick_LOAD_RELOAD_Msk) {
-    return;  // Invalid reload value
+static inline void sys_tick_init(uint32_t ticks)
+{
+  if ((ticks - 1UL) > SysTick_LOAD_RELOAD_Msk)
+  {
+    return; // Invalid reload value
   }
 
   SysTick->LOAD = (uint32_t)(ticks - 1UL);                          /* set reload register */
@@ -38,59 +44,70 @@ static void reset_system_clock_to_internal_high_speed_clock(void)
   // bootloader may jump here with SYSCLK still sourced from its PLL setup.
   RCC->CR |= RCC_CR_HSION;
   RCC->CR &= ~RCC_CR_HSIDIV;
-  while ((RCC->CR & RCC_CR_HSIRDY) == 0);
+  while ((RCC->CR & RCC_CR_HSIRDY) == 0)
+    ;
 
   RCC->CFGR &= ~RCC_CFGR_SW;
-  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSISYS);
+  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSISYS)
+    ;
 
   RCC->CR &= ~RCC_CR_PLLON;
-  while ((RCC->CR & RCC_CR_PLLRDY) != 0);
+  while ((RCC->CR & RCC_CR_PLLRDY) != 0)
+    ;
 
   RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);
 }
 
-void clock_init() {
-  RCC->CR |= RCC_CR_HSEON;             // Enable HSE
-  while (!(RCC->CR & RCC_CR_HSERDY));  // Wait for HSE ready
+void clock_init()
+{
+  RCC->CR |= RCC_CR_HSEON; // Enable HSE
+  while (!(RCC->CR & RCC_CR_HSERDY))
+    ; // Wait for HSE ready
   reset_system_clock_to_internal_high_speed_clock();
 
   RCC->PLLCFGR =
-      (0b11 << 0) |   // PLLSRC = HSE
-      (0b000 << 4) |  // PLLM = /1
-      (16 << 8) |     // PLLN = 16
-      (0b00 << 25) |  // PLLR = /2
-      (1 << 28);      // PLLREN = enable PLLR output
+      (0b11 << 0) |  // PLLSRC = HSE
+      (0b000 << 4) | // PLLM = /1
+      (16 << 8) |    // PLLN = 16
+      (0b00 << 25) | // PLLR = /2
+      (1 << 28);     // PLLREN = enable PLLR output
 
-  RCC->CR |= RCC_CR_PLLON;             // Enable PLL
-  while (!(RCC->CR & RCC_CR_PLLRDY));  // Wait for PLL ready
+  RCC->CR |= RCC_CR_PLLON; // Enable PLL
+  while (!(RCC->CR & RCC_CR_PLLRDY))
+    ; // Wait for PLL ready
 
-  FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_0;  // 1 wait state
+  FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_0; // 1 wait state
 
-  RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);  // AHB = /1, APB = /1
-  RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_1;  // SYSCLK = PLLRCLK
+  RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);          // AHB = /1, APB = /1
+  RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_1; // SYSCLK = PLLRCLK
 
-  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLLRCLK);  // Wait for switch to PLL
+  while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLLRCLK)
+    ; // Wait for switch to PLL
 
   // Init Sys Tick after the system clock is at the frequency used by F_SYS_CLOCK.
   sys_tick_init(F_SYS_CLOCK / (1000U / (uint32_t)HAL_TICK_FREQ_1KHZ));
 }
 
-inline uint32_t get_sys_tick() {
+inline uint32_t get_sys_tick()
+{
   uint32_t systick_inline = systick_global;
   return systick_inline;
 }
 
-inline uint32_t get_elapsed_seconds() {
+inline uint32_t get_elapsed_seconds()
+{
   uint32_t second_counter = second_counter_global;
   return second_counter;
 }
 
-void SysTick_Handler() {
+void SysTick_Handler()
+{
   // The global system tick, increments at 1Kz (every 1ms)
   systick_global++;
 
   // Increment second counter
-  if (systick_global % 1000 == 0) {
+  if (systick_global % 1000 == 0)
+  {
     second_counter_global++;
   }
 }
