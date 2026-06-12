@@ -21,6 +21,7 @@ endif
 
 FLASH_LAYOUT ?= $(if $(filter toolhead,$(BUILD_TARGET)),direct,bootloader)
 DRIVER_NAMES ?= $(if $(filter toolhead,$(BUILD_TARGET)),,usb usb_cdc)
+DEVICE_NAME ?= $(if $(filter STM32G0B1,$(CHIP)),stm32g0b1,)
 
 ifeq ($(BUILD_TARGET),mainboard)
   BOARD_CLASS ?= mainboard
@@ -53,7 +54,7 @@ else
   $(error Unknown BUILD_TARGET "$(BUILD_TARGET)"; use mainboard, display, or toolhead)
 endif
 
-export BUILD_TARGET MAIN_BOARD_NAME DISPLAY_BOARD_NAME TOOLHEAD_BOARD_NAME MAINBOARD_DISPLAY_NAME FLASH_LAYOUT BOARD_CLASS BOARD_NAME MCU CHIP DRIVER_NAMES
+export BUILD_TARGET MAIN_BOARD_NAME DISPLAY_BOARD_NAME TOOLHEAD_BOARD_NAME MAINBOARD_DISPLAY_NAME FLASH_LAYOUT BOARD_CLASS BOARD_NAME MCU CHIP DEVICE_NAME DRIVER_NAMES
 
 # ====================================
 # OS-specific shell/commands
@@ -86,6 +87,7 @@ SRC_DIR                      := .
 CONFIG_DIR                   := config
 CORE_DIR                     := core
 HAL_INCLUDE_DIR              := hal/include
+DEVICE_DIR                   := devices/$(DEVICE_NAME)
 BOARD_DIR                    := boards/$(BOARD_CLASS)/$(BOARD_NAME)
 BOARD_BLD_DIR                := $(BOARD_DIR)/build
 MAINBOARD_DISPLAY_DIR        := boards/display_module/$(MAINBOARD_DISPLAY_NAME)
@@ -93,6 +95,12 @@ DRIVER_DIRS                  := $(foreach name,$(DRIVER_NAMES),drivers/$(name))
 MAINBOARD_DISPLAY_OBJ_SUFFIX := $(if $(MAINBOARD_DISPLAY_ENABLED),-with-$(MAINBOARD_DISPLAY_NAME),)
 FLASH_LAYOUT_OBJ_SUFFIX      := $(if $(filter direct,$(FLASH_LAYOUT)),-direct,)
 OBJ_DIR                      := build/$(BUILD_TARGET)/$(BOARD_NAME)$(MAINBOARD_DISPLAY_OBJ_SUFFIX)$(FLASH_LAYOUT_OBJ_SUFFIX)
+
+ifneq ($(DEVICE_NAME),)
+  ifeq ($(wildcard $(DEVICE_DIR)),)
+    $(error Unknown DEVICE_NAME "$(DEVICE_NAME)"; expected a folder under devices)
+  endif
+endif
 
 -include $(BOARD_BLD_DIR)$(SEP)bootloader.mk
 
@@ -132,7 +140,7 @@ CPUFLAGS := -mcpu=$(MCU) -mthumb
 CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections
 ASFLAGS  := $(CPUFLAGS)
 
-LD_SCRIPT := $(BOARD_BLD_DIR)$(SEP)linker.ld
+LD_SCRIPT := $(if $(DEVICE_NAME),$(DEVICE_DIR)$(SEP)build$(SEP)linker.ld,$(BOARD_BLD_DIR)$(SEP)linker.ld)
 LDFLAGS   := $(CPUFLAGS) -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) \
              -Wl,--defsym=APP_FLASH_ORIGIN=$(APP_FLASH_ORIGIN) \
              -Wl,--defsym=APP_FLASH_LENGTH=$(APP_FLASH_LENGTH) \
@@ -141,7 +149,8 @@ LDFLAGS   := $(CPUFLAGS) -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) \
              -T$(LD_SCRIPT)
 
 CFLAGS += -I$(CONFIG_DIR) -I$(CORE_DIR) -I$(CORE_DIR)/include -I$(CORE_DIR)/$(BUILD_TARGET) -I$(HAL_INCLUDE_DIR) -I$(BOARD_DIR)
-CFLAGS += -I$(BOARD_DIR)/include -I$(BOARD_DIR)/include/core
+CFLAGS += -I$(BOARD_DIR)/include
+CFLAGS += $(if $(DEVICE_NAME),-I$(DEVICE_DIR)/include -I$(DEVICE_DIR)/include/core)
 CFLAGS += $(foreach dir,$(DRIVER_DIRS),-I$(dir) -I$(dir)/include)
 ifneq ($(MAINBOARD_DISPLAY_ENABLED),)
   CFLAGS += -DMAINBOARD_HAS_DISPLAY_MODULE=1 -I$(CORE_DIR)/display -I$(MAINBOARD_DISPLAY_DIR)
@@ -163,11 +172,13 @@ DISPLAY_CSRCS := core/display/display_render.c \
 CSRCS := $(ENTRY_CSRCS) \
          $(COMMON_CSRCS) \
          $(if $(filter display,$(BUILD_TARGET)),$(DISPLAY_CSRCS)) \
+         $(if $(DEVICE_NAME),$(wildcard $(DEVICE_DIR)/*.c)) \
          $(wildcard $(BOARD_DIR)/*.c) \
          $(if $(MAINBOARD_DISPLAY_ENABLED),$(wildcard $(MAINBOARD_DISPLAY_DIR)/*.c)) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.c))
 
-ASRCS := $(wildcard $(BOARD_DIR)/*.s) \
+ASRCS := $(if $(DEVICE_NAME),$(wildcard $(DEVICE_DIR)/*.s)) \
+         $(wildcard $(BOARD_DIR)/*.s) \
          $(if $(MAINBOARD_DISPLAY_ENABLED),$(wildcard $(MAINBOARD_DISPLAY_DIR)/*.s)) \
          $(foreach dir,$(DRIVER_DIRS),$(wildcard $(dir)/*.s))
 
@@ -263,6 +274,7 @@ print-config:
 	@echo BOARD_NAME=$(BOARD_NAME)
 	@echo MCU=$(MCU)
 	@echo CHIP=$(CHIP)
+	@echo DEVICE_NAME=$(DEVICE_NAME)
 	@echo DRIVER_NAMES=$(DRIVER_NAMES)
 	@echo BOARD_DIR=$(BOARD_DIR)
 	@echo IMAGE_FLASH_ORIGIN=$(IMAGE_FLASH_ORIGIN)

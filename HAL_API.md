@@ -3,8 +3,9 @@
 This file documents the public hardware abstraction layer (HAL) methods that
 board support must provide to shared core entry points. The goal is to keep
 `firmware/core/` hardware-neutral: core code calls role-level methods, and the
-selected board folder owns clocks, pins, registers, peripheral quirks, and local
-device state.
+selected board folder owns pins, peripheral selection, hardware quirks, and
+local device state. Shared processor-family startup, register definitions,
+clock setup, and generic peripheral helpers live under `firmware/devices/`.
 
 Each board implementation should place its role header and source in:
 
@@ -17,8 +18,8 @@ Each board implementation should place its role header and source in:
 - `firmware/boards/toolhead/<board_name>/toolhead_hal.c`
 
 The shared entry point includes only the selected board's role HAL header. Do
-not make core entry points include board register headers, pin maps, vendor
-startup files, or board-specific driver state.
+not make core entry points include device register headers, board pin maps,
+vendor startup files, or board-specific driver state.
 
 ## Common Rules
 

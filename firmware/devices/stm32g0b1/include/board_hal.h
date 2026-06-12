@@ -1,5 +1,5 @@
-#ifndef __MEMORY_MAP_H__
-#define __MEMORY_MAP_H__
+#ifndef STM32G0B1_DEVICE_H
+#define STM32G0B1_DEVICE_H
 
 #include <stdint.h>
 
@@ -118,4 +118,4 @@ static inline __attribute__((always_inline)) void interrupts_disable() {
   __disable_irq();
 }
 
-#endif  // __MEMORY_MAP_H__
+#endif // STM32G0B1_DEVICE_H

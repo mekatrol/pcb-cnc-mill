@@ -4,6 +4,11 @@ This first STM32G0B1CBT6 bring-up image configures the onboard red `RLED` on
 `PA8` and uses TIM7 to toggle it every 1000 ms. The main loop sleeps between
 interrupts.
 
+Shared STM32G0B1 CMSIS headers, startup vectors, linker script, clock setup,
+and generic timer register code live in `firmware/devices/stm32g0b1/`. This
+board folder keeps only the EBB42 pin choice, TIM7 role, LED interrupt action,
+DFU flash settings, and toolhead HAL wiring.
+
 Build from the repository root:
 
 ```sh

@@ -25,28 +25,12 @@ FIRMWARE_DIR := $(ROOT_DIR)$(SEP)firmware
 OBJ_DIR      := $(ROOT_DIR)$(SEP)firmware$(SEP)build$(SEP)mainboard$(SEP)$(BOARD_NAME)$(MAINBOARD_DISPLAY_SUFFIX)
 OBJ_DIR      := $(OBJ_DIR)$(FLASH_LAYOUT_SUFFIX)
 
-CC      := arm-none-eabi-gcc
-OBJCOPY := arm-none-eabi-objcopy
-SIZE    := arm-none-eabi-size
 OPENOCD := openocd
 STLINK_SERIAL ?=
 OPENOCD_STLINK_SERIAL_CMD := $(if $(STLINK_SERIAL),-c "adapter serial $(STLINK_SERIAL)",)
 BTT_BOOTLOADER_BIN := $(BOARD_DIR)$(SEP)bootloader$(SEP)btt-skr-mini-e3-v3.0-bootloader-region-0x2000.bin
 BTT_BOOTLOADER_ADDR := 0x08000000
 
-CPUFLAGS := -mcpu=cortex-m0plus -mthumb
-CFLAGS   := $(CPUFLAGS) -std=c11 -Wall -Wextra -Werror -Os -ffreestanding -fdata-sections -ffunction-sections
-ASFLAGS  := $(CPUFLAGS)
-
-SRCS := \
-	$(BOARD_DIR)$(SEP)mainboard_hal.c \
-	$(BOARD_DIR)$(SEP)startup.s
-
-OBJS := $(patsubst $(BOARD_DIR)$(SEP)%,$(OBJ_DIR)$(SEP)%,$(SRCS:.c=.o))
-OBJS := $(OBJS:.s=.o)
-
-OUT_ELF := $(OBJ_DIR)$(SEP)$(TARGET).elf
-OUT_MAP := $(OBJ_DIR)$(SEP)$(TARGET).map
 OUT_BIN := $(OBJ_DIR)$(SEP)$(TARGET).bin
 
 ifeq ($(FLASH_LAYOUT),direct)
@@ -55,25 +39,9 @@ else
   FLASH_ADDR := 0x08002000
 endif
 
-LDFLAGS := $(CPUFLAGS) -nostdlib -Wl,--gc-sections -Wl,-Map=$(OUT_MAP) -T$(MAKEFILE_DIR)linker.ld
-
 .PHONY: all
 all:
 	"$(MAKE)" -C "$(FIRMWARE_DIR)" all BUILD_TARGET=mainboard MAIN_BOARD_NAME=$(BOARD_NAME) BOARD_NAME=$(BOARD_NAME) MAINBOARD_DISPLAY_NAME=$(MAINBOARD_DISPLAY_NAME) FLASH_LAYOUT=$(FLASH_LAYOUT)
-
-$(OUT_BIN): $(OUT_ELF)
-	$(OBJCOPY) -O binary $< $@
-
-$(OUT_ELF): $(OBJS) $(MAKEFILE_DIR)linker.ld
-	$(CC) $(OBJS) $(LDFLAGS) -o $@
-
-$(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.c
-	$(MKDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJ_DIR)$(SEP)%.o: $(BOARD_DIR)$(SEP)%.s
-	$(MKDIR)
-	$(CC) $(ASFLAGS) -c $< -o $@
 
 .PHONY: flash
 flash: all

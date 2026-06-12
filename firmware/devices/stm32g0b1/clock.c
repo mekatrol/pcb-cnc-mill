@@ -58,7 +58,7 @@ static void reset_system_clock_to_internal_high_speed_clock(void)
   RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);
 }
 
-void clock_init()
+void clock_init(void)
 {
   RCC->CR |= RCC_CR_HSEON; // Enable HSE
   while (!(RCC->CR & RCC_CR_HSERDY))
@@ -77,8 +77,9 @@ void clock_init()
     ; // Wait for PLL ready
 
   // Configure flash for the final 64 MHz system clock before switching SYSCLK
-  // to the PLL. Two wait states keep instruction fetches inside the STM32G0B1
-  // timing limit during this first hardware bring-up image.
+  // to the phase-locked loop (PLL). The STM32 register header names the field
+  // bit masks rather than the encoded wait-state values, so LATENCY_1 sets the
+  // field to binary 010, which selects two wait states.
   FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_1;
 
   RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);          // AHB = /1, APB = /1
@@ -91,19 +92,19 @@ void clock_init()
   sys_tick_init(F_SYS_CLOCK / (1000U / (uint32_t)HAL_TICK_FREQ_1KHZ));
 }
 
-inline uint32_t get_sys_tick()
+inline uint32_t get_sys_tick(void)
 {
   uint32_t systick_inline = systick_global;
   return systick_inline;
 }
 
-inline uint32_t get_elapsed_seconds()
+inline uint32_t get_elapsed_seconds(void)
 {
   uint32_t second_counter = second_counter_global;
   return second_counter;
 }
 
-void SysTick_Handler()
+void SysTick_Handler(void)
 {
   // The global system tick, increments at 1Kz (every 1ms)
   systick_global++;

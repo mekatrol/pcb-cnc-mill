@@ -44,12 +44,13 @@ details.
   display panel compiled into a mainboard firmware image. Use this for panels
   such as a Mini12864 connected to a mainboard expansion header, not for
   display boards that have their own MCU and firmware image.
-- `firmware/hal/include/` - standard HAL interfaces used by core and reusable
-  drivers.
-- `firmware/hal/stm32/` - STM32 implementations for GPIO, timers, PWM, serial,
-  flash, ADC, interrupts, and other MCU-specific services.
-- `firmware/hal/lpc/` - LPC implementations for the same standard HAL
-  interfaces.
+- `firmware/devices/` - processor-family support shared by multiple boards.
+  `devices/stm32g0b1/` owns CMSIS/register headers, reset and vector startup,
+  the common linker script, 64 MHz clock setup, and generic timer register
+  helpers used by both the SKR Mini E3 V3 and EBB42 Gen2 V1.
+- `firmware/hal/include/` - future standard HAL interfaces used by core and
+  reusable drivers. Core code should depend on these interfaces instead of MCU
+  registers as the HAL layer is filled out.
 - `firmware/drivers/` - reusable device or protocol drivers that should be
   written once, then used by several boards or MCU families.
 - `firmware/drivers/usb/` - shared USB device support.
@@ -77,9 +78,10 @@ details.
   live in config, not hidden source constants.
 
 Rule of thumb: core code should not know a board brand exists. Board folders
-hold pins, ports, MCU quirks, and feature flags. HAL folders hold processor
-family implementations. Driver folders hold standard protocol and device code
-once. Machine config ties selected hardware to one CNC build.
+hold pins, selected peripherals, hardware quirks, and feature flags. Device
+folders hold processor-family startup and register-level helpers. Driver
+folders hold standard protocol and external-device code once. Machine config
+ties selected hardware to one CNC build.
 
 Mainboard, display, and toolhead firmware should share the same runtime model:
 common startup flow, priority task table, optional preemptive dispatch for
@@ -275,17 +277,19 @@ make -C firmware print-config \
   can be restored with the board Makefile. See [`HAL_API.md`](HAL_API.md) for
   the display HAL methods that the shared display entry point calls.
 - `firmware/boards/mainboard/btt_skr_mini_e3_v3/` - initial STM32G0B1RET6
-  bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It includes startup
-  code, linker script, GDB script, and Makefile targets for ST-Link/OpenOCD
-  flash and debug. The image is linked at the BTT mainboard app offset
+  bring-up skeleton for the BTT SKR Mini E3 V3 mainboard. It uses shared
+  STM32G0B1 startup, clock, linker, register, and timer support from
+  `firmware/devices/stm32g0b1/`, while board-local code owns pins, timer roles,
+  and interrupt behavior. The image is linked at the BTT mainboard app offset
   `0x08002000` by default, or at `0x08000000` with `FLASH_LAYOUT=direct` for
   SWD recovery without a bootloader. The copied BTT SKR Mini E3 V3 bootloader
   is stored under the board's `bootloader/` directory and can be restored with
   the board Makefile.
 - `firmware/boards/toolhead/btt_ebb42_gen2_v1/` - initial STM32G0B1CBT6
-  toolhead bring-up. It links a direct application at `0x08000000`, flashes
-  through the STM32 ROM DFU bootloader with `dfu-util`, and uses TIM7 to toggle
-  the onboard red `RLED` on `PA8` every 1000 ms. Factory backup and restore
+  toolhead bring-up. It shares the STM32G0B1 processor support used by the SKR
+  Mini E3 V3, links a direct application at `0x08000000`, flashes through the
+  STM32 ROM DFU bootloader with `dfu-util`, and uses a board-local TIM7 handler
+  to toggle the onboard red `RLED` on `PA8` every 1000 ms. Factory restore
   steps are in [`doco/btt_ebb42_gen2_v1/backup_restore.md`](doco/btt_ebb42_gen2_v1/backup_restore.md).
 - `firmware/boards/display_module/btt_mini12864/` - placeholder for a BTT
   Mini12864-style compact display connected to a mainboard expansion header.
