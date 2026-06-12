@@ -352,32 +352,47 @@ Timing:
 
 ## Toolhead HAL
 
-No concrete toolhead board is implemented yet. The intended contract should
-match the same role shape used by mainboard and display firmware.
+The current shared toolhead entry point is `firmware/core/toolhead/main.c`.
+The first concrete board is the BTT EBB42 Gen2 V1 LED smoke-test image.
 
-Expected header:
+Required header:
 
 ```c
-#include <stdint.h>
-
 void toolhead_initialize_hardware(void);
-uint32_t toolhead_get_monotonic_milliseconds(void);
-void toolhead_run_background_tasks(void);
-void toolhead_wait_for_scheduler_tick(void);
+void toolhead_wait_for_interrupt(void);
 ```
 
-Expected responsibilities:
+### `toolhead_initialize_hardware`
+
+Purpose:
 
 - Configure local clocks, GPIO, timers, CAN or serial links, fans, probe inputs,
   sensors, tool outputs, and any local driver hardware.
-- Provide a monotonic millisecond scheduler clock.
-- Run bounded scheduled service for communication, local IO, sensor polling,
-  fan updates, and diagnostic/status reporting.
-- Keep time-critical or safety-critical edges in hardware timer or interrupt
-  paths with short scheduled follow-up work.
+- Leave heaters, fans, stepper outputs, and other active tool outputs in safe
+  states until validated control code enables them.
+- Keep interrupt handlers short and bounded.
 
-This section should be updated when the first toolhead entry point and board
-HAL are added.
+Timing:
+
+- Called once before the shared toolhead main loop starts.
+- May block during reset-time clock and peripheral setup.
+
+### `toolhead_wait_for_interrupt`
+
+Purpose:
+
+- Put the processor into an interrupt-wait state when no toolhead service work
+  is ready.
+- The current EBB42 Gen2 smoke test wakes only for SysTick and TIM7. TIM7
+  toggles the onboard red LED on `PA8` every 1000 ms.
+
+Timing:
+
+- Called repeatedly from the shared toolhead main loop.
+- Must return when an enabled interrupt wakes the core.
+
+The contract will grow with monotonic scheduler and bounded background-service
+methods when CAN and local IO tasks are added.
 
 ## Runtime Driver Hooks
 

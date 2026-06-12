@@ -134,8 +134,10 @@ Run these commands from the repository root:
 ```sh
 make -C firmware mainboard
 make -C firmware display
+make -C firmware toolhead
 make -C firmware flash BUILD_TARGET=mainboard
 make -C firmware flash BUILD_TARGET=display
+make -C firmware flash BUILD_TARGET=toolhead
 ```
 
 Run these commands from inside `firmware/`:
@@ -143,18 +145,22 @@ Run these commands from inside `firmware/`:
 ```sh
 make mainboard
 make display
+make toolhead
 make flash BUILD_TARGET=mainboard
 make flash BUILD_TARGET=display
+make flash BUILD_TARGET=toolhead
 ```
 
-The default boards are `MAIN_BOARD_NAME=btt_skr_mini_e3_v3` and
-`DISPLAY_BOARD_NAME=btt_tft35_e3`. `MAINBOARD_DISPLAY_NAME=none` means the
-mainboard image has no attached display module. Override names on the command
-line when adding another board or display module:
+The default boards are `MAIN_BOARD_NAME=btt_skr_mini_e3_v3`,
+`DISPLAY_BOARD_NAME=btt_tft35_e3`, and
+`TOOLHEAD_BOARD_NAME=btt_ebb42_gen2_v1`. `MAINBOARD_DISPLAY_NAME=none` means
+the mainboard image has no attached display module. Override names on the
+command line when adding another board or display module:
 
 ```sh
 make -C firmware mainboard MAIN_BOARD_NAME=btt_skr_mini_e3_v3
 make -C firmware display DISPLAY_BOARD_NAME=btt_tft35_e3
+make -C firmware toolhead TOOLHEAD_BOARD_NAME=btt_ebb42_gen2_v1
 make -C firmware mainboard \
   MAIN_BOARD_NAME=btt_skr_mini_e3_v3 \
   MAINBOARD_DISPLAY_NAME=btt_mini12864
@@ -246,10 +252,11 @@ make -C firmware print-config \
 ## Current Firmware Targets
 
 - `firmware/Makefile` - shared firmware build entry point. It selects the main
-  controller with `MAIN_BOARD_NAME` and the display controller with
-  `DISPLAY_BOARD_NAME`. Use `make -C firmware mainboard` for the default
-  mainboard build, `make -C firmware display` for the default display build, or
-  override names on the command line. Mainboard-attached display panels are
+  controller with `MAIN_BOARD_NAME`, the display controller with
+  `DISPLAY_BOARD_NAME`, and the toolhead controller with
+  `TOOLHEAD_BOARD_NAME`. Use `make -C firmware mainboard`,
+  `make -C firmware display`, or `make -C firmware toolhead` for the default
+  role builds. Mainboard-attached display panels are
   selected with `MAINBOARD_DISPLAY_NAME`; when set to a value other than
   `none`, the output path and binary name include `-with-<module>` so plain and
   display-equipped mainboard images do not overwrite each other. Shared runtime
@@ -275,6 +282,11 @@ make -C firmware print-config \
   SWD recovery without a bootloader. The copied BTT SKR Mini E3 V3 bootloader
   is stored under the board's `bootloader/` directory and can be restored with
   the board Makefile.
+- `firmware/boards/toolhead/btt_ebb42_gen2_v1/` - initial STM32G0B1CBT6
+  toolhead bring-up. It links a direct application at `0x08000000`, flashes
+  through the STM32 ROM DFU bootloader with `dfu-util`, and uses TIM7 to toggle
+  the onboard red `RLED` on `PA8` every 1000 ms. Factory backup and restore
+  steps are in [`doco/btt_ebb42_gen2_v1/backup_restore.md`](doco/btt_ebb42_gen2_v1/backup_restore.md).
 - `firmware/boards/display_module/btt_mini12864/` - placeholder for a BTT
   Mini12864-style compact display connected to a mainboard expansion header.
   It is compiled into a mainboard firmware image with

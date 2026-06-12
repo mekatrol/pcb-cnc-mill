@@ -127,17 +127,43 @@ ebb42_factory_backup.bin: OK
 
 Place board into DFU mode.
 
-Flash:
+Build the EBB42 Gen2 toolhead image:
+
+```bash
+make -C firmware toolhead TOOLHEAD_BOARD_NAME=btt_ebb42_gen2_v1
+```
+
+Flash with the board Makefile:
+
+```bash
+make -C firmware flash \
+  BUILD_TARGET=toolhead \
+  TOOLHEAD_BOARD_NAME=btt_ebb42_gen2_v1
+```
+
+If the current user cannot open the DFU device, keep `make` unprivileged and
+run only `dfu-util` through `sudo`:
+
+```bash
+make -C firmware flash \
+  BUILD_TARGET=toolhead \
+  TOOLHEAD_BOARD_NAME=btt_ebb42_gen2_v1 \
+  DFU_UTIL="sudo dfu-util"
+```
+
+The equivalent direct command is:
 
 ```bash
 sudo dfu-util \
   -d 0483:df11 \
   -a 0 \
-  -s 0x08000000 \
-  -D ebb42_factory_backup.bin
+  -s 0x08000000:leave \
+  -D firmware/build/toolhead/btt_ebb42_gen2_v1-direct/pcb-cnc-mill-toolhead-btt_ebb42_gen2_v1-direct.bin
 ```
 
-Verify device resets after programming.
+The current smoke-test image uses TIM7 to toggle the onboard red `RLED` on
+`PA8` every 1000 ms. One complete off/on blink cycle therefore takes two
+seconds.
 
 ---
 
